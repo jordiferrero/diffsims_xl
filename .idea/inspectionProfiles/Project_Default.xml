@@ -1,0 +1,24 @@
+<component name="InspectionProjectProfileManager">
+  <profile version="1.0">
+    <option name="myName" value="Project Default" />
+    <inspection_tool class="JupyterKernelInspection" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="JupyterPackageInspection" enabled="false" level="WARNING" enabled_by_default="false" />
+    <inspection_tool class="PyPackageRequirementsInspection" enabled="true" level="WARNING" enabled_by_default="true">
+      <option name="ignoredPackages">
+        <value>
+          <list size="9">
+            <item index="0" class="java.lang.String" itemvalue="matplotlib-scalebar" />
+            <item index="1" class="java.lang.String" itemvalue="hyperspy_gui_ipywidgets" />
+            <item index="2" class="java.lang.String" itemvalue="pyxem" />
+            <item index="3" class="java.lang.String" itemvalue="addcopyfighandler" />
+            <item index="4" class="java.lang.String" itemvalue="bokeh" />
+            <item index="5" class="java.lang.String" itemvalue="python-pptx" />
+            <item index="6" class="java.lang.String" itemvalue="lumispy" />
+            <item index="7" class="java.lang.String" itemvalue="hyperspy" />
+            <item index="8" class="java.lang.String" itemvalue="hyperspy_gui_traitsui" />
+          </list>
+        </value>
+      </option>
+    </inspection_tool>
+  </profile>
+</component>

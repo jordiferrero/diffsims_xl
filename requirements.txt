@@ -1,0 +1,14 @@
+numpy
+pandas
+hyperspy
+pyxem
+tqdm
+dask
+matplotlib
+diffsims
+jupyter-slack
+tensorflow
+neptune-client
+neptune-tensorflow-keras
+pymongo
+dnspython

@@ -12,3 +12,6 @@ neptune-client
 neptune-tensorflow-keras
 pymongo
 dnspython
+dagster
+dagit
+requests

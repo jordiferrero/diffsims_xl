@@ -96,7 +96,7 @@ def remove_peaks(lib_entry_n, n_intensity_peaks, n_peaks_to_remove):
         for peak in peaks_to_remove:
             temp_arr_intensities[peak] = 0.
 
-        from simulator_diffsims.sims.diffraction_simulation import DiffractionSimulation
+        from simulator_diffsims_dagster.sims.diffraction_simulation import DiffractionSimulation
         lib_temp = DiffractionSimulation(
             coordinates=temp_arr_coordinates,
             indices=temp_indices,

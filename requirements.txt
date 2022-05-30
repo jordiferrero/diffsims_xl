@@ -15,3 +15,5 @@ dnspython
 dagster
 dagit
 requests
+pyopencl
+yaml

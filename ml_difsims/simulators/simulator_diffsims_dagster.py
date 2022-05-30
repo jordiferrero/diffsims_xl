@@ -6,7 +6,7 @@ import hyperspy.api as hs
 import pyxem as pxm
 from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 import diffpy.structure
-from dagster import job, op, get_dagster_logger, Out, In, DynamicOut, DynamicOutput, graph
+from dagster import job, op, get_dagster_logger, Out, In, DynamicOut, DynamicOutput, graph, GraphOut
 from ml_difsims.simulators.simulation_utils import *
 from ml_difsims.simulators.noise_utils import *
 from ml_difsims.utils.postprocessing_utils import *
@@ -38,7 +38,7 @@ def load_json_metadata_to_dict():
             # It will disturb the calibration value by % when cropping in the q space. In None, nothing happens.
         },
         "orientations_parameters": {
-            "n_points": 30000,
+            "n_points": 500,
             "use_orix_sampling": True,
             "ori_files_location_from_root": r"models/orix_orientation_full_lists",
             "orientation_files_list": ['orientations_pg422_3_xxxx.npy',
@@ -104,7 +104,7 @@ def load_json_metadata_to_dict():
         "save_relpath": r'data/simulations',
         "scattering_params": 'lobato',
         "simulated_direct_beam_bool": False,
-        "simulation_orientations_chunk_size" : 5000,
+        "simulation_orientations_chunk_size" : 100,
     }
 
     json_dump = json.dumps(json_vars)
@@ -343,109 +343,153 @@ def crop_and_rebin_individually_1d(vs, range, dp):
 
 
 #%%
+@op(out={"a": Out(), "b": Out(), "c": Out(), "d": Out()})
+def get_metadata(vs):
+    a = vs.simulation_orientations_chunk_size
+    b = vs.detector_geometry.radial_integration_1d
+    c = vs.detector_geometry.radial_integration_2d
+    d = vs.detector_geometry.save_peak_position_library
+    return a, b, c, d
+
+
+@op(out={"keys": Out(), "vals": Out()})
+def get_dictionary_items(dictionary):
+    keys = [k for k in dictionary.keys()]
+    vals = [v for v in dictionary.values()]
+    return keys, vals
+
+
+@op(out=DynamicOut())
+def get_chunks(euler_list, n_ori_chunk):
+        for ii, euler_chunk in enumerate(chunker(euler_list, n_ori_chunk, None)):
+            yield DynamicOutput(euler_chunk, mapping_key=f"{ii}")
+
+
+@op(out={"chunk_rad_data": Out(), "chunk_rad_data_2d": Out(), "chunk_peak_pos": Out(), "qx_axis": Out()})
+def process_each_chunk_of_orientation_angles(euler_chunk, vs, key, phase):
+    # Process each chunk of orientation angles (for each phase individually)
+    chunk_data = da.array([])
+    chunk_peak_pos = []
+    qx_axis = None
+
+    # Simulate diffraction patterns from library
+    for euler in euler_chunk:
+        # Skip None euler angles (from non-perfect chunking)
+        if euler is None:
+            continue
+
+        # Iterate through relrods
+        randomise_relrod = vs.relrod_parameters.randomise_relrod
+        relrod_list = vs.relrod_parameters.relrod_list
+        len_relrodlist = 1 if randomise_relrod else len(relrod_list)
+        for j in range(len_relrodlist):
+            library, lib_entry_mod = get_simulation_library(vs, j, key, phase, euler)
+            # Get coordinates from simulation
+            coords_library = get_coordinates_dict_from_library(library)
+            chunk_peak_pos.append(coords_library)
+
+            # Iterate through sigmas
+            randomise_sigmas = vs.sigma_parameters.randomise_sigmas
+            sigma_2d_gaussian_list = vs.sigma_parameters.sigma_2d_gaussian_list
+            len_sigmaslist = 1 if randomise_sigmas else len(sigma_2d_gaussian_list)
+            for k in range(len_sigmaslist):
+
+                pattern = get_diffraction_pattern(lib_entry_mod, vs, k)
+                try:
+                    chunk_data = da.vstack((chunk_data, [pattern]))
+                except ValueError:
+                    chunk_data = [pattern]
+
+                # plt.figure()
+                # plt.imshow(pattern, cmap='viridis')
+                # plt.show()
+
+    # Chunk simulated (for a n_chunk_size of one phase only)
+    chunk_s = pyxem_setup_and_corrections(chunk_data, vs, key)
+    chunk_s = add_noise_to_pyxem_dp(chunk_s, vs)
+
+    # Radial integration
+    chunk_s, vs = set_detector_on_dp_object(vs, chunk_s)
+
+    if vs.detector_geometry.radial_integration_1d:
+        chunk_s_radial = radially_integrate_1d(chunk_s, vs)
+        qx_axis = chunk_s_radial.axes_manager.signal_axes[0].axis
+        chunk_rad_data =  chunk_s_radial.data
+    else:
+        chunk_rad_data = None
+
+    if vs.detector_geometry.radial_integration_2d:
+        chunk_s_cake = radially_integrate_2d(chunk_s, vs)
+        qx_axis = chunk_s_cake.axes_manager.signal_axes[0].axis
+        chunk_rad_data_2d = chunk_s_cake.data
+    else:
+        chunk_rad_data_2d = None
+
+    if vs.detector_geometry.save_peak_position_library:
+        # Add peak positions to phase as a dictionary entry
+        chunk_peak_pos = chunk_peak_pos
+    else:
+        chunk_peak_pos = None
+    return chunk_rad_data, chunk_rad_data_2d, chunk_peak_pos, qx_axis
+
+@op()
+def merge_list_to_dask_arr(data_list):
+
+    phase_data = da.array([])
+    for i, data in enumerate(data_list):
+        if i == 0:
+            phase_data = data
+        else:
+            phase_data = da.vstack((phase_data, data))
+    return phase_data
+
+@op()
+def merge_peak_position_dictionary(peak_position_list):
+            phase_peak_pos = {}
+            i_dict = 0
+            for chunk_group in peak_position_list:
+                for dict_peak_pos in chunk_group:
+                    phase_peak_pos[i_dict] = dict_peak_pos
+                    i_dict += 1
+            return phase_peak_pos
+
+
+#%%
 # Overall operations
-@graph(out={"data": Out(), "data_2d": Out(), "data_peak_pos": Out(), "qx_axis": Out(), "vs": Out()})
-def simulate_difffraction_data(vs, phase_dict, euler_list_n):
-    n_ori_chunk = vs.simulation_orientations_chunk_size
-    radial_integration_1d = vs.detector_geometry.radial_integration_1d
-    radial_integration_2d = vs.detector_geometry.radial_integration_2d
-    save_peak_position_library = vs.detector_geometry.save_peak_position_library
+@graph(out={"data": GraphOut(), "data_2d": GraphOut(), "data_peak_pos": GraphOut(), "qx_axis": GraphOut(), "vs": GraphOut()})
+def simulate_diffraction_data(vs, phase_dict, euler_list_n):
+
+    n_ori_chunk, radial_integration_1d, radial_integration_2d, save_peak_position_library = get_metadata(vs)
 
     data = da.array([])
     data_2d = da.array([])
     data_peak_pos = {}
 
-    for i, (key, phase) in enumerate(phase_dict.items()):
+    keys, phases = get_dictionary_items(phase_dict)
+    for i, (key, phase) in enumerate(zip(keys, phases)):
 
-        phase_data = da.array([])
-        phase_data_2d = da.array([])
-        phase_peak_pos = []
         euler_list = euler_list_n[i]
 
-        for ii, euler_chunk in enumerate(chunker(euler_list, n_ori_chunk, None)):
-
-            # Process each chunk of orientation angles (for each phase individually)
-            chunk_data = da.array([])
-            chunk_peak_pos = []
-
-            # Simulate diffraction patterns from library
-            for euler in euler_chunk:
-                # Skip None euler angles (from non-perfect chunking)
-                if euler is None:
-                    continue
-
-                # Iterate through relrods
-                randomise_relrod = vs.relrod_parameters.randomise_relrod
-                relrod_list = vs.relrod_parameters.relrod_list
-                len_relrodlist = 1 if randomise_relrod else len(relrod_list)
-                for j in range(len_relrodlist):
-                    library, lib_entry_mod = get_simulation_library(vs, j, key, phase, euler)
-                    # Get coordinates from simulation
-                    coords_library = get_coordinates_dict_from_library(library)
-                    chunk_peak_pos.append(coords_library)
-
-                    # Iterate through sigmas
-                    randomise_sigmas = vs.sigma_parameters.randomise_sigmas
-                    sigma_2d_gaussian_list = vs.sigma_parameters.sigma_2d_gaussian_list
-                    len_sigmaslist = 1 if randomise_sigmas else len(sigma_2d_gaussian_list)
-                    for k in range(len_sigmaslist):
-
-                        pattern = get_diffraction_pattern(lib_entry_mod, vs, k)
-                        try:
-                            chunk_data = da.vstack((chunk_data, [pattern]))
-                        except ValueError:
-                            chunk_data = [pattern]
-
-                        # plt.figure()
-                        # plt.imshow(pattern, cmap='viridis')
-                        # plt.show()
-
-            # Chunk simulated (for a n_chunk_size of one phase only)
-            chunk_s = pyxem_setup_and_corrections(chunk_data, vs, key)
-            chunk_s = add_noise_to_pyxem_dp(chunk_s, vs)
-
-            # Radial integration
-            chunk_s, vs = set_detector_on_dp_object(vs, chunk_s)
-
-            if radial_integration_1d:
-                chunk_s_radial = radially_integrate_1d(chunk_s, vs)
-                qx_axis = chunk_s_radial.axes_manager.signal_axes[0].axis
-                # Convert to numpy and append
-                if ii == 0:
-                    phase_data = chunk_s_radial.data
-                else:
-                    phase_data = da.vstack((phase_data, chunk_s_radial.data))
-
-            if radial_integration_2d:
-                chunk_s_cake = radially_integrate_2d(chunk_s, vs)
-                qx_axis = chunk_s_cake.axes_manager.signal_axes[0].axis
-                # Convert to numpy and append
-                if ii == 0:
-                    phase_data_2d = chunk_s_cake.data
-                else:
-                    phase_data_2d = da.vstack((phase_data_2d, chunk_s_cake.data))
-
-            if save_peak_position_library:
-                # Add peak positions to phase as a dictionary entry
-                phase_peak_pos.append(chunk_peak_pos)
-                data_peak_pos[key] = {}
-                i_dict = 0
-                for chunk_group in phase_peak_pos:
-                    for dict_peak_pos in chunk_group:
-                        data_peak_pos[key][i_dict] = dict_peak_pos
-                        i_dict += 1
+        euler_chunks = get_chunks(euler_list, n_ori_chunk)
+        chunk_rad_data, chunk_rad_data_2d, chunk_peak_pos, qx_axis = euler_chunks.map(process_each_chunk_of_orientation_angles(vs, key, phase))
 
         if radial_integration_1d:
+            phase_data = merge_list_to_dask_arr(chunk_rad_data.collect())
             if i == 0:
                 data = [phase_data]
             else:
                 data = da.vstack((data, [phase_data]))
 
         if radial_integration_2d:
+            phase_data_2d = merge_list_to_dask_arr(chunk_rad_data_2d.collect())
             if i == 0:
                 data_2d = [phase_data_2d]
             else:
                 data_2d = da.vstack((data_2d, [phase_data_2d]))
+
+        if save_peak_position_library:
+            phase_peak_pos = merge_peak_position_dictionary(chunk_peak_pos.collect())
+            data_peak_pos[key] = phase_peak_pos
 
     data_peak_pos = json.dumps(data_peak_pos)
     get_dagster_logger().info(f'Simulation of data completed. Shape of 1d : {data}')
@@ -453,7 +497,7 @@ def simulate_difffraction_data(vs, phase_dict, euler_list_n):
     return data, data_2d, data_peak_pos, qx_axis, vs
 
 
-@graph(out={"data": Out(), "data_k": Out(), "data_px": Out(), "labels": Out(), "data_2d_px": Out(), "labels_2d": Out()})
+@op(out={"data": Out(), "data_k": Out(), "data_px": Out(), "labels": Out(), "data_2d_px": Out(), "labels_2d": Out()})
 def post_processing(vs, data, data_2d, qx_axis, phase_dict):
     sqrt_signal = vs.postprocessing_parameters.sqrt_signal
     add_background_to = vs.data_augmentation_parameters.background_parameters.add_background_to
@@ -604,7 +648,7 @@ def post_processing(vs, data, data_2d, qx_axis, phase_dict):
         data_2d_px, labels_2d = None, None
     return data, data_k, data_px, labels, data_2d_px, labels_2d
 
-@graph
+@op
 def save_simulation(vs, data, data_k, data_px, labels, data_2d_px, labels_2d, data_peak_pos, phase_dict, qx_axis,
                     json_vars_dump):
     calibration_modify_percent = vs.calibration_parameters.calibration_modify_percent
@@ -680,7 +724,7 @@ def simulate_diffraction():
     # Get variables of interest
 
     # Simulate
-    data, data_2d, data_peak_pos, qx_axis, vs = simulate_difffraction_data(vs, phase_dict, euler_list_n)
+    data, data_2d, data_peak_pos, qx_axis, vs = simulate_diffraction_data(vs, phase_dict, euler_list_n)
 
     # Post-processing
     data, data_k, data_px, labels, data_2d_px, labels_2d = post_processing(vs, data, data_2d, qx_axis, phase_dict)

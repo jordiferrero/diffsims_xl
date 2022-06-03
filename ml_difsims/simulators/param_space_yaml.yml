@@ -1,0 +1,103 @@
+# This is the configuration file for my simulation
+# It uses the package "paramspace"
+---
+sim_params: !pspace
+
+  root_path: 'G:/My Drive/PhD/projects/external_measurements/ml_difsims'
+  simulation_orientations_chunk_size: 100
+  random_seed: 10
+  save_relpath: 'data/simulations'
+
+  structure_parameters:
+    phase_files_location_from_root: 'models/crystal_phases'
+    phase_files: ['p4mbm_scaled_mixed_halide.cif', 'gratia_2h.cif', 'pbi2_2h.cif']
+    add_bkg_phase: !pdim
+      default: False
+      values: [True, False]
+    scattering_params: !pdim
+      default: 'lobato'
+      values: ['lobato', 'xtables' ]
+
+  calibration_parameters:
+    calibration_value: [0.00588]
+    # It will disturb the calibration value by % when cropping in the q space. In None, nothing happens.
+    calibration_modify_percent: !pdim
+      default: 0
+      range: [0, 8, 2]
+
+  orientations_parameters:
+    n_points: 30000
+    use_orix_sampling: !pdim
+      default: True
+      values: [True, False]
+    ori_files_location_from_root: 'models/orix_orientation_full_lists'
+    orientation_files_list: ['orientations_pg422_3_xxxx.npy', 'orientations_pg622_3_xxxx.npy', 'orientations_pg32_3_xxxx.npy']
+    orientation_sampling_mode: !pdim
+      default: 'cubo'
+      values: ['cubo', 'euler', 'quat']
+
+  data_augmentation_parameters:
+    peak_removal:
+      # Finds n brightest peaks to remove from. n_intensity_peaks >= n_peaks_to_remove
+      remove_peaks_from_diffraction_library: !pdim
+        default: True
+        values: [True, False]
+      # Removes n amount of peaks of the brightest ones.
+      n_intensity_peaks: 20
+      num_peaks_to_remove: 'random'
+
+    noise_addition:
+      add_noise: !pdim
+        default: False
+        values: [True, False]
+      include_also_non_noisy_simulation: True
+      snrs: !pdim
+        default: [0.9, 0.99]
+        values: [[0.9, 0.99], [0.9, 0.99, 0.999, 0.9999]]
+      intensity_spikes: !pdim
+        default: [0.25,]
+        values: [[0.25], [0.1, 0.25, 0.50, 0.75]]
+
+    background_parameters:
+      add_background_to: !pdim
+        default: 'none'
+        values: ['1d', 'none']
+      a_vals: !pdim
+        default: [1., 5.]
+        values: [[1., 5.], [0.1, 1., 10.]]
+      tau_vals: !pdim
+        default: [0.5, 1.5]
+        values: [[0.5, 1.5], [0.1, 0.5, 1.0, 1.5, 2.0, 2.5]]
+
+    simulated_direct_beam_bool: !pdim
+      default: False
+      values: [ True, False ]
+
+  relrod_parameters:
+    randomise_relrod: True
+    relrod_list: [0.02, 0.2, 0.4, 0.6, 1, 2, 5, 10]
+
+  sigma_parameters:
+    randomise_sigmas: True
+    sigma_2d_gaussian_list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+  detector_geometry:
+    detector_size: 515
+    beam_energy: !pdim
+      default: 200.0
+      values: [200., 300.]
+    detector_pix_size: 55e-6
+    detector_type: 'Medipix515x515Detector'
+    radial_integration_1d: True
+    radial_integration_2d: True
+    save_peak_position_library: True
+
+  postprocessing_parameters:
+    cropping_start_k: 0.11
+    cropping_stop_k: 1.30
+    cropped_signal_k_points: 147
+    cropping_start_px: 13
+    cropping_stop_px: 160
+    sqrt_signal: !pdim
+      default: False
+      values: [True, False]

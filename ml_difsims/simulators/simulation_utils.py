@@ -3,6 +3,8 @@ import numpy as np
 from diffsims.libraries.structure_library import StructureLibrary
 from diffsims.generators.diffraction_generator import DiffractionGenerator
 from diffsims.generators.library_generator import DiffractionLibraryGenerator
+from diffsims.sims.diffraction_simulation import DiffractionSimulation
+
 seed = 10
 
 # Functions that are useful for the simulation of diffraction patterns
@@ -96,7 +98,6 @@ def remove_peaks(lib_entry_n, n_intensity_peaks, n_peaks_to_remove):
         for peak in peaks_to_remove:
             temp_arr_intensities[peak] = 0.
 
-        from simulator_diffsims_dagster.sims.diffraction_simulation import DiffractionSimulation
         lib_temp = DiffractionSimulation(
             coordinates=temp_arr_coordinates,
             indices=temp_indices,

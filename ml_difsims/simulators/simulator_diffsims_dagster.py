@@ -4,6 +4,7 @@ import numpy as np
 import dask.array as da
 import hyperspy.api as hs
 import pyxem as pxm
+from diffsims.utils.sim_utils import get_electron_wavelength
 from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 import diffpy.structure
 from dagster import job, op, get_dagster_logger, Out, In, DynamicOut, DynamicOutput, graph, GraphOut, RetryPolicy
@@ -18,98 +19,13 @@ import random
 import uuid
 import requests
 
-default_policy = RetryPolicy(max_retries=5)
+default_policy = RetryPolicy(max_retries=3)
 
 # %%
-@op(out={"vs": Out(), "json_vars_dump": Out()})
-def load_json_metadata_to_dict():
+@op(out={"vs": Out(), "json_vars_dump": Out()}, config_schema={"json_string": str})
+def load_json_metadata_to_dict(context):
     # Variables as json structure (Only input)
-    #json_vars = requests.get(context.op_config["url"])
-    json_vars = {
-        "root_path": r'G:\My Drive\PhD\projects\external_measurements\ml_difsims',
-        "structure_parameters": {
-            "phase_files_location_from_root": r"models/crystal_phases",
-            "phase_files": ['p4mbm_scaled_mixed_halide.cif', 'gratia_2h.cif', 'pbi2_2h.cif'],
-            "add_bkg_phase": False,
-            # Do you want to add a bkg/just noise phase at the end? If True, the final datasets will be phases + 1 shape.
-        },
-        "calibration_parameters": {
-            "calibration_value": [0.00588, ],
-            #  List of 1 value only for now
-            "calibration_modify_percent": 5,
-            # It will disturb the calibration value by % when cropping in the q space. In None, nothing happens.
-        },
-        "orientations_parameters": {
-            "n_points": 500,
-            "use_orix_sampling": True,
-            "ori_files_location_from_root": r"models/orix_orientation_full_lists",
-            "orientation_files_list": ['orientations_pg422_3_xxxx.npy',
-                                       'orientations_pg622_3_xxxx.npy',
-                                       'orientations_pg32_3_xxxx.npy'],
-            "orientation_sampling_mode": 'cubo',
-        },
-        "data_augmentation_parameters": {
-            "peak_removal": {
-                "remove_peaks_from_diffraction_library": False,
-                "n_intensity_peaks": 20,
-                # Finds n brightest peaks to remove from. n_intensity_peaks >= n_peaks_to_remove
-                "num_peaks_to_remove": 'random',
-                # Removes n amount of peaks of the brightest ones.
-                # If 'random' is passed, it will randomise this value between 0 and n_intensity_peaks.
-            },
-            "noise_addition": {
-                "add_noise": False,
-                "include_also_non_noisy_simulation": False,
-                # If add noise, do you want to also have the non-noisy data?
-                "snrs": [0.9, 0.99],
-                "intensity_spikes": [0.25, ],
-            },
-            "background_parameters": {
-                "add_background_to": 'none',
-                # Select from '1d' or 'none'
-                "a_vals": [1., 5.],
-                # A: pre-exp factor, tau: decay time constant
-                "tau_vals": [0.5, 1.5],
-            },
-        },
-        "relrod_parameters": {
-            "randomise_relrod": True,
-            # If true, will randomly pick one. If false, it will compute all.
-            "relrod_list": [0.02, 0.2, 0.4, 0.6, 1, 2, 5, 10],
-        },
-        "sigma_parameters": {
-            "randomise_sigmas": True,
-            # If true, will randomly pick one. If false, it will compute all.
-            "sigma_2d_gaussian_list": np.arange(3, 10, 1).tolist(),
-        },
-        "detector_geometry": {
-            # In px, keV, m, m
-            "detector_size": 515,
-            "beam_energy": 200.0,
-            "wavelength": 2.5079e-12,
-            "detector_pix_size": 55e-6,
-            "detector_type": "Medipix515x515Detector",
-            "radial_integration_1d": True,
-            "radial_integration_2d": True,
-            "save_peak_position_library": True,
-        },
-        "postprocessing_parameters": {
-            "cropping_start_k": 0.11,
-            "cropping_stop_k": 1.30,
-            "cropped_signal_k_points": 147,
-            # To rebin signal, if necessary (when using k_units)
-            "cropping_start_px": 13,
-            "cropping_stop_px": 160,
-            "sqrt_signal": False,
-        },
-        "random_seed": 10,
-        "save_relpath": r'data/simulations',
-        "scattering_params": 'lobato',
-        "simulated_direct_beam_bool": False,
-        "simulation_orientations_chunk_size" : 100,
-    }
-
-    json_dump = json.dumps(json_vars)
+    json_dump = context.op_config["json_string"]
     vs = json.loads(json_dump, object_hook=lambda d: SimpleNamespace(**d))
     return vs, json_dump
 
@@ -200,7 +116,8 @@ def set_detector_on_dp_object(vs, dp):
 
     detector_size = vs.detector_geometry.detector_size
     beam_energy = vs.detector_geometry.beam_energy
-    wavelength = vs.detector_geometry.wavelength
+
+    wavelength = get_electron_wavelength(beam_energy)
     detector_pix_size = vs.detector_geometry.detector_pix_size
     calibration = vs.calibration
 
@@ -228,10 +145,10 @@ def get_simulation_library(vs, i_relrod, key, phase, euler):
     randomise_relrod = vs.relrod_parameters.randomise_relrod
     relrod_list = vs.relrod_parameters.relrod_list
     beam_energy = vs.detector_geometry.beam_energy
-    scattering_params = vs.scattering_params
+    scattering_params = vs.structure_parameters.scattering_params
     calibration = vs.calibration
     detector_size = vs.detector_geometry.detector_size
-    simulated_direct_beam_bool = vs.simulated_direct_beam_bool
+    simulated_direct_beam_bool = vs.data_augmentation_parameters.simulated_direct_beam_bool
     remove_peaks_from_diffraction_library = vs.data_augmentation_parameters.peak_removal.remove_peaks_from_diffraction_library
     n_intensity_peaks = vs.data_augmentation_parameters.peak_removal.n_intensity_peaks
     num_peaks_to_remove = vs.data_augmentation_parameters.peak_removal.num_peaks_to_remove
@@ -432,7 +349,7 @@ def process_each_chunk(chunk, vs):
 
     if vs.detector_geometry.radial_integration_2d:
         chunk_s_cake = radially_integrate_2d(chunk_s, vs)
-        qx_axis = chunk_s_cake.axes_manager.signal_axes[0].axis
+        qx_axis = chunk_s_cake.axes_manager.signal_axes[1].axis
         chunk_rad_data_2d = {key: da.array(chunk_s_cake.data)}
     else:
         chunk_rad_data_2d = None
@@ -470,12 +387,14 @@ def merge_dict_chunk_to_dask_arr(data_list, phase_dict):
 def merge_peak_position_dictionary(peak_position_dict_list, phase_dict):
     key_list = [k for k in phase_dict.keys()]
     data_peak_pos = {key: [] for key in key_list}
-
+    print(data_peak_pos)
     for chunk_element_dict in peak_position_dict_list:
         # Get a dictionary with "key" and list of pos_dict
         key = [k for k in chunk_element_dict.keys()][0]
         chunk_peak_pos_dict_list = chunk_element_dict[key]
-        data_peak_pos[key] = data_peak_pos[key].append(chunk_peak_pos_dict_list)
+        #print(np.shape(chunk_peak_pos_dict_list))
+        print(data_peak_pos[key])
+        data_peak_pos[key].append(chunk_peak_pos_dict_list)
 
     data_peak_pos = json.dumps(data_peak_pos)
     return data_peak_pos
@@ -724,12 +643,11 @@ def save_simulation(vs, data, data_k, data_px, labels, data_2d_px, labels_2d, da
         g.create_dataset('metadata_json', data=json_vars_dump)
 
     return
-# %%
 
-@job(op_retry_policy=default_policy)
+@graph()
 def simulate_diffraction():
     # Loading and reading all metadata
-    vs, json_vars_dump = load_json_metadata_to_dict()  # (json_input)
+    vs, json_vars_dump = load_json_metadata_to_dict()
     vs = start_random_seeds(vs)
     calibration, vs = get_dif_calibration_value(vs)
     phase_dict, vs = create_phase_dict(vs)
@@ -737,14 +655,11 @@ def simulate_diffraction():
     phase_dict, euler_list_n, vs = make_changes_to_add_bkg_phase(vs, phase_dict, euler_list_n)
     id, vs = get_unique_id(vs)
 
-    # Get variables of interest
-
     # Simulate
     data, data_2d, data_peak_pos, qx_axis = simulate_diffraction_data(vs, phase_dict, euler_list_n)
 
     # Post-processing
     data, data_k, data_px, labels, data_2d_px, labels_2d = post_processing(vs, data, data_2d, qx_axis, phase_dict)
-
 
     # Save files
     save_simulation(vs, data, data_k, data_px, labels, data_2d_px, labels_2d, data_peak_pos, phase_dict, qx_axis, json_vars_dump)
@@ -755,7 +670,98 @@ def simulate_diffraction():
     # TODO: Pass in the jason input file here
     # db_collection.insert_one(json_input)
     get_dagster_logger().info(f"Simulation {id} complete")
+# %%
+
+json_vars_example = json.dumps({
+        "root_path": r'G:\My Drive\PhD\projects\external_measurements\ml_difsims',
+        "structure_parameters": {
+            "phase_files_location_from_root": r"models/crystal_phases",
+            "phase_files": ['p4mbm_scaled_mixed_halide.cif', 'gratia_2h.cif', 'pbi2_2h.cif'],
+            "add_bkg_phase": True,
+            # Do you want to add a bkg/just noise phase at the end? If True, the final datasets will be phases + 1 shape.
+            "scattering_params": 'lobato',
+        },
+        "calibration_parameters": {
+            "calibration_value": [0.00588, 0.00589],
+            #  List of 1 value only for now
+            "calibration_modify_percent": 5,
+            # It will disturb the calibration value by % when cropping in the q space. In None, nothing happens.
+        },
+        "orientations_parameters": {
+            "n_points": 10,
+            "use_orix_sampling": True,
+            "ori_files_location_from_root": r"models/orix_orientation_full_lists",
+            "orientation_files_list": ['orientations_pg422_3_xxxx.npy',
+                                       'orientations_pg622_3_xxxx.npy',
+                                       'orientations_pg32_3_xxxx.npy'],
+            "orientation_sampling_mode": 'cubo',
+        },
+        "data_augmentation_parameters": {
+            "peak_removal": {
+                "remove_peaks_from_diffraction_library": True,
+                "n_intensity_peaks": 20,
+                # Finds n brightest peaks to remove from. n_intensity_peaks >= n_peaks_to_remove
+                "num_peaks_to_remove": 'random',
+                # Removes n amount of peaks of the brightest ones.
+                # If 'random' is passed, it will randomise this value between 0 and n_intensity_peaks.
+            },
+            "noise_addition": {
+                "add_noise": True,
+                "include_also_non_noisy_simulation": True,
+                # If add noise, do you want to also have the non-noisy data?
+                "snrs": [0.9, 0.99],
+                "intensity_spikes": [0.25, 0.50],
+            },
+            "background_parameters": {
+                "add_background_to": '1d',
+                # Select from '1d' or 'none'
+                "a_vals": [1., 5.],
+                # A: pre-exp factor, tau: decay time constant
+                "tau_vals": [0.5, 1.5],
+            },
+            "simulated_direct_beam_bool": True,
+        },
+        "relrod_parameters": {
+            "randomise_relrod": True,
+            # If true, will randomly pick one. If false, it will compute all.
+            "relrod_list": [0.02, 0.2, 0.4, 0.6, 1, 2, 5, 10],
+        },
+        "sigma_parameters": {
+            "randomise_sigmas": True,
+            # If true, will randomly pick one. If false, it will compute all.
+            "sigma_2d_gaussian_list": np.arange(3, 10, 1).tolist(),
+        },
+        "detector_geometry": {
+            # In px, keV, m, m
+            "detector_size": 515,
+            "beam_energy": 200.0,
+            "wavelength": 2.5079e-12,
+            "detector_pix_size": 55e-6,
+            "detector_type": "Medipix515x515Detector",
+            "radial_integration_1d": True,
+            "radial_integration_2d": True,
+            "save_peak_position_library": True,
+        },
+        "postprocessing_parameters": {
+            "cropping_start_k": 0.11,
+            "cropping_stop_k": 1.30,
+            "cropped_signal_k_points": 147,
+            # To rebin signal, if necessary (when using k_units)
+            "cropping_start_px": 13,
+            "cropping_stop_px": 160,
+            "sqrt_signal": True,
+        },
+        "random_seed": 10,
+        "save_relpath": r'data/simulations',
+        "simulation_orientations_chunk_size" : 5,
+    })
+
+
+@job(op_retry_policy=default_policy, config={'ops': {'simulate_diffraction': {'ops': {'load_json_metadata_to_dict': {'config': {'json_string': json_vars_example}}}}},
+                                             "execution": {"config": {"multiprocess": {"max_concurrent": 4,}}}},)
+def simulate_diffraction_single():
+    simulate_diffraction()
 
 
 if __name__ == "__main__":
-    result = simulate_diffraction.execute_in_process()
+    result = simulate_diffraction_single.execute_in_process()

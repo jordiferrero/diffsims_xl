@@ -17,3 +17,5 @@ dagit
 requests
 pyopencl
 yaml
+paramspace
+tqdm

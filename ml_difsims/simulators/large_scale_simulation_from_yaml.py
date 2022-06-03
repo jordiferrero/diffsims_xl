@@ -1,12 +1,12 @@
 import os.path
 import tqdm
 from dagster import job, op, static_partitioned_config
-from ml_difsims.simulators.simulator_diffsims_dagster import *
+from ml_difsims.simulators.simulator_diffsims_dagster_ops import *
 import json
 
 from paramspace import yaml
 
-root = os.path.abspath(r"G:\My Drive\PhD\projects\external_measurements\ml_difsims\data\simulations\json_files")
+root = os.path.abspath(r"G:\My Drive\PhD\projects\external_measurements\ml_difsims")
 path_to_save_jsons = os.path.join(root, "data\simulations\json_files")
 
 yaml_path = os.path.join(root, "ml_difsims/simulators/param_space_yaml.yml")
@@ -36,7 +36,8 @@ print(JSON_FILES)
 @static_partitioned_config(partition_keys=JSON_FILES)
 def json_md_config(partition_key: str):
     return {'ops': {'simulate_diffraction': {'ops': {'load_json_metadata_to_dict': {'config': {'json_string': partition_key}}}}},
-            "execution": {"config": {"multiprocess": {"max_concurrent": 4,}}}}
+            #"execution": {"config": {"multiprocess": {"max_concurrent": 4,}}}
+            }
 
 
 # Write the job

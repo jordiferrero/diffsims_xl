@@ -3,9 +3,9 @@ from ml_difsims.simulators.simulator_diffsims_dagster_ops import *
 import json
 
 json_vars_example = json.dumps({
-        "root_path": r'G:\My Drive\PhD\projects\external_measurements\ml_difsims',
+        "root_path": 'C:/Users/Sauron/Documents/GitHub/strankslab/ml_difsims',
         "structure_parameters": {
-            "phase_files_location_from_root": r"models/crystal_phases",
+            "phase_files_location_from_root": "models/crystal_phases",
             "phase_files": ['p4mbm_scaled_mixed_halide.cif', 'gratia_2h.cif', 'pbi2_2h.cif'],
             "add_bkg_phase": True,
             # Do you want to add a bkg/just noise phase at the end? If True, the final datasets will be phases + 1 shape.
@@ -20,7 +20,7 @@ json_vars_example = json.dumps({
         "orientations_parameters": {
             "n_points": 10,
             "use_orix_sampling": True,
-            "ori_files_location_from_root": r"models/orix_orientation_full_lists",
+            "ori_files_location_from_root": "models/orix_orientation_full_lists",
             "orientation_files_list": ['orientations_pg422_3_xxxx.npy',
                                        'orientations_pg622_3_xxxx.npy',
                                        'orientations_pg32_3_xxxx.npy'],
@@ -82,13 +82,14 @@ json_vars_example = json.dumps({
             "sqrt_signal": True,
         },
         "random_seed": 10,
-        "save_relpath": r'data/simulations',
+        "save_relpath": 'data/simulations',
         "simulation_orientations_chunk_size" : 5,
     })
 
 
 @job(op_retry_policy=default_policy, config={'ops': {'simulate_diffraction': {'ops': {'load_json_metadata_to_dict': {'config': {'json_string': json_vars_example}}}}},
-                                             "execution": {"config": {"multiprocess": {"max_concurrent": 4,}}}},)
+                                             #"execution": {"config": {"multiprocess": {"max_concurrent": 4,}}}
+     },)
 def simulate_diffraction_single():
     simulate_diffraction()
 

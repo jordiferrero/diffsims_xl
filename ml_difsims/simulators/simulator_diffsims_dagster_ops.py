@@ -542,10 +542,13 @@ def post_processing(vs, data, data_2d, qx_axis, phase_dict):
             data_2d_px = data_2d[:, :, cropping_start_px: cropping_stop_px, :]
         else:
             # Calculate how many pixels the calibration tolerance factor corresponds to
-            one_px_q = qx_axis.max() / vs.radial_steps
+            detector_size = vs.detector_geometry.detector_size
+            radial_steps = int(np.ceil((int(detector_size / 2) - 1) / 2) * 2)
+            one_px_q = qx_axis.max() / radial_steps
             max_q_range = calibration_modify_percent / 100 * qx_axis.max()
             max_px_shift = max_q_range / one_px_q
             range_percents_modification = np.arange(-max_px_shift, max_px_shift + 1, 1)
+
             signals_temp_2d = da.array([])
             for phase_2d in data_2d:
                 for ori_2d in phase_2d:
@@ -612,10 +615,15 @@ def save_simulation(vs, data, data_k, data_px, labels, data_2d_px, labels_2d, da
 
     get_dagster_logger().info(full_name)
 
+    # Create folder
+    save_folder_path = os.path.join(vs.root_path, vs.save_relpath,)
+    if not os.path.exists(save_folder_path):
+        os.makedirs(save_folder_path)
+
     # Save all sorts of useful files
     import h5py
     id_name = f'{vs.id}.hdf5'
-    save_path = os.path.join(vs.root_path, vs.save_relpath, id_name)
+    save_path = os.path.join(save_folder_path, id_name)
     with h5py.File(save_path, 'w') as f:
         if radial_integration_1d:
             g = f.create_group('1d')

@@ -16,6 +16,6 @@ dagster
 dagit
 requests
 pyopencl
-yaml
+PyYAML
 paramspace
 tqdm

@@ -400,37 +400,8 @@ def merge_peak_position_dictionary(peak_position_dict_list, phase_dict):
 def get_qx_axis_array(qx_axis_list):
     return qx_axis_list[0]
 
-#%%
-# Overall operations
-@graph(out={"data": GraphOut(), "data_2d": GraphOut(), "data_peak_pos": GraphOut(), "qx_axis": GraphOut(),})
-def simulate_diffraction_data(vs, phase_dict, euler_list_n):
-
-    n_ori_chunk, radial_integration_1d, radial_integration_2d, save_peak_position_library = get_metadata(vs)
-
-    data = da.array([])
-    data_2d = da.array([])
-    data_peak_pos = {}
-
-    chunks = get_chunks(euler_list_n, phase_dict, n_ori_chunk)
-    chunk_rad_data, chunk_rad_data_2d, chunk_peak_pos, qx_axis = chunks.map(lambda chk: process_each_chunk(chk, vs))
-
-    qx_axis = get_qx_axis_array(qx_axis.collect())
-    if radial_integration_1d:
-        data = merge_dict_chunk_to_dask_arr(chunk_rad_data.collect(), phase_dict)
-
-    if radial_integration_2d:
-        data_2d = merge_dict_chunk_to_dask_arr(chunk_rad_data_2d.collect(), phase_dict)
-
-    if save_peak_position_library:
-        data_peak_pos = merge_peak_position_dictionary(chunk_peak_pos.collect(), phase_dict)
-
-    get_dagster_logger().info(f'Simulation of data completed. Shape of 1d : {data}')
-
-    return {"data": data, "data_2d": data_2d, "data_peak_pos": data_peak_pos, "qx_axis": qx_axis,}
-
-
-@op(out={"data": Out(), "data_k": Out(), "data_px": Out(), "labels": Out(), "data_2d_px": Out(), "labels_2d": Out()})
-def post_processing(vs, data, data_2d, qx_axis, phase_dict):
+@op(out={"data": Out(), "data_k": Out(), "data_px": Out(), "labels": Out()})
+def post_processing_1d(vs, data, qx_axis, phase_dict):
     sqrt_signal = vs.postprocessing_parameters.sqrt_signal
     add_background_to = vs.data_augmentation_parameters.background_parameters.add_background_to
     cropping_start_k = vs.postprocessing_parameters.cropping_start_k
@@ -440,7 +411,6 @@ def post_processing(vs, data, data_2d, qx_axis, phase_dict):
     cropping_start_px = vs.postprocessing_parameters.cropping_start_px
     cropping_stop_px = vs.postprocessing_parameters.cropping_stop_px
     radial_integration_1d = vs.detector_geometry.radial_integration_1d
-    radial_integration_2d = vs.detector_geometry.radial_integration_2d
 
     if radial_integration_1d:
         # Sqrt signal (if wanted)
@@ -520,10 +490,20 @@ def post_processing(vs, data, data_2d, qx_axis, phase_dict):
         labels = np.zeros((n_phases, int(data_px.shape[0] / n_phases)))
         for i in range(n_phases):
             labels[i, :] = i
-
         labels = labels.flatten()
     else:
         data, data_k, data_px, labels = None, None, None, None
+
+    return data, data_k, data_px, labels
+
+@op(out={"data_2d_px": Out(), "labels_2d": Out()})
+def post_processing_2d(vs, data_2d, qx_axis, phase_dict):
+    sqrt_signal = vs.postprocessing_parameters.sqrt_signal
+    cropped_signal_k_points = vs.postprocessing_parameters.cropped_signal_k_points
+    calibration_modify_percent = vs.calibration_parameters.calibration_modify_percent
+    cropping_start_px = vs.postprocessing_parameters.cropping_start_px
+    cropping_stop_px = vs.postprocessing_parameters.cropping_stop_px
+    radial_integration_2d = vs.detector_geometry.radial_integration_2d
 
     if radial_integration_2d:
         # Sqrt signal (if wanted)
@@ -559,7 +539,7 @@ def post_processing(vs, data, data_2d, qx_axis, phase_dict):
             # Reshape back
             shape_ori = list(data_2d.shape)
             shape_ori[-2] = cropped_signal_k_points
-            data_2d_px = np.reshape(signals_temp_2d, shape_ori)
+            data_2d_px = da.reshape(signals_temp_2d, shape_ori)
 
         # Renormalise
         dpmax = data_2d_px.max([-2, -1])
@@ -572,17 +552,51 @@ def post_processing(vs, data, data_2d, qx_axis, phase_dict):
         data_2d_px = data_2d_px.reshape(-1, data_2d_px.shape[-2], data_2d_px.shape[-1])
 
         # Create labels for 2D
-        phase_names = list(phase_dict.keys())
         n_phases = len(phase_dict)
         labels_2d = np.zeros((n_phases, int(data_2d_px.shape[0] / n_phases)))
         for i in range(n_phases):
             labels_2d[i, :] = i
-
-        labels_2d = labels.flatten()
+        labels_2d = labels_2d.flatten()
     else:
         data_2d_px, labels_2d = None, None
 
-    return data, data_k, data_px, labels, data_2d_px, labels_2d
+    return data_2d_px, labels_2d
+
+#%%
+# Overall operations
+@graph(out={"data": GraphOut(), "data_2d": GraphOut(), "data_peak_pos": GraphOut(), "qx_axis": GraphOut(),})
+def simulate_diffraction_data(vs, phase_dict, euler_list_n):
+
+    n_ori_chunk, radial_integration_1d, radial_integration_2d, save_peak_position_library = get_metadata(vs)
+
+    data = da.array([])
+    data_2d = da.array([])
+    data_peak_pos = {}
+
+    chunks = get_chunks(euler_list_n, phase_dict, n_ori_chunk)
+    chunk_rad_data, chunk_rad_data_2d, chunk_peak_pos, qx_axis = chunks.map(lambda chk: process_each_chunk(chk, vs))
+
+    qx_axis = get_qx_axis_array(qx_axis.collect())
+    if radial_integration_1d:
+        data = merge_dict_chunk_to_dask_arr(chunk_rad_data.collect(), phase_dict)
+
+    if radial_integration_2d:
+        data_2d = merge_dict_chunk_to_dask_arr(chunk_rad_data_2d.collect(), phase_dict)
+
+    if save_peak_position_library:
+        data_peak_pos = merge_peak_position_dictionary(chunk_peak_pos.collect(), phase_dict)
+
+    get_dagster_logger().info(f'Simulation of data completed. Shape of 1d : {data}')
+
+    return {"data": data, "data_2d": data_2d, "data_peak_pos": data_peak_pos, "qx_axis": qx_axis,}
+
+
+@graph(out={"data": GraphOut(), "data_k": GraphOut(), "data_px": GraphOut(), "labels": GraphOut(), "data_2d_px": GraphOut(), "labels_2d": GraphOut()})
+def post_processing(vs, data, data_2d, qx_axis, phase_dict):
+    data, data_k, data_px, labels = post_processing_1d(vs, data, qx_axis, phase_dict)
+    data_2d_px, labels_2d = post_processing_2d(vs, data_2d, qx_axis, phase_dict)
+
+    return {"data": data, "data_k": data_k, "data_px": data_px, "labels": labels, "data_2d_px": data_2d_px, "labels_2d": labels_2d}
 
 @op
 def save_simulation(vs, data, data_k, data_px, labels, data_2d_px, labels_2d, data_peak_pos, phase_dict, qx_axis, json_vars_dump):

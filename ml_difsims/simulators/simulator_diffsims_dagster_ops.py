@@ -387,13 +387,10 @@ def merge_dict_chunk_to_dask_arr(data_list, phase_dict):
 def merge_peak_position_dictionary(peak_position_dict_list, phase_dict):
     key_list = [k for k in phase_dict.keys()]
     data_peak_pos = {key: [] for key in key_list}
-    print(data_peak_pos)
     for chunk_element_dict in peak_position_dict_list:
         # Get a dictionary with "key" and list of pos_dict
         key = [k for k in chunk_element_dict.keys()][0]
         chunk_peak_pos_dict_list = chunk_element_dict[key]
-        #print(np.shape(chunk_peak_pos_dict_list))
-        print(data_peak_pos[key])
         data_peak_pos[key].append(chunk_peak_pos_dict_list)
 
     data_peak_pos = json.dumps(data_peak_pos)

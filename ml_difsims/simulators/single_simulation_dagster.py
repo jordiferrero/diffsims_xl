@@ -12,7 +12,7 @@ json_vars_example = json.dumps({
             "scattering_params": 'lobato',
         },
         "calibration_parameters": {
-            "calibration_value": [0.00588, 0.00589],
+            "calibration_value": [0.00588,],
             #  List of 1 value only for now
             "calibration_modify_percent": 5,
             # It will disturb the calibration value by % when cropping in the q space. In None, nothing happens.

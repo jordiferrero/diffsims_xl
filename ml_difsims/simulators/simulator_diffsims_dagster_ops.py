@@ -108,27 +108,27 @@ def get_unique_id(vs):
 
 @op(out={"dp": Out(), "vs": Out()})
 def set_detector_on_dp_object(vs, dp):
-    @op
-    def get_diffsims_detector_object(vs):
-        detector_type = vs.detector_geometry.detector_type
-        detector =  getattr(pxm.detectors, detector_type)
-        return detector
 
-    detector_size = vs.detector_geometry.detector_size
     beam_energy = vs.detector_geometry.beam_energy
-
-    wavelength = get_electron_wavelength(beam_energy)
-    detector_pix_size = vs.detector_geometry.detector_pix_size
+    unit = "k_A^-1"
     calibration = vs.calibration
+    detector_size = dp.axes_manager.signal_axes[0].size
+    assert detector_size == dp.axes_manager.signal_axes[1].size
 
     radial_steps = int(np.ceil((int(detector_size / 2) - 1) / 2) * 2)
     setattr(vs, 'radial_steps', radial_steps)
+    center = [detector_size / 2, detector_size / 2]
 
-    detector = get_diffsims_detector_object(vs)
-    camera_length = detector_pix_size / (wavelength * calibration * 1e10)
-    center = ([detector_size / 2, detector_size / 2])
-    unit = "k_A^-1"
-
+    # # PyFAI way (without knowing the calibration but the camera_length
+    # @op
+    # def get_diffsims_detector_object(vs):
+    #     detector_type = vs.detector_geometry.detector_type
+    #     detector = getattr(pxm.detectors, detector_type)
+    #     return detector
+    # wavelength = get_electron_wavelength(beam_energy)
+    # detector_pix_size = vs.detector_geometry.detector_pix_size
+    # detector = get_diffsims_detector_object(vs)
+    # camera_length = detector_pix_size / (wavelength * calibration * 1e10)
     # ai = AzimuthalIntegrator(dist=camera_length, detector=detector, wavelength=wavelength)
     # ai.setFit2D(directDist=camera_length * 1000, centerX=center[1], centerY=center[0])
     # dp.metadata.set_item("Signal.ai", ai)
@@ -137,7 +137,7 @@ def set_detector_on_dp_object(vs, dp):
     dp.set_diffraction_calibration(calibration)
     dp.unit = unit
     dp.set_experimental_parameters(beam_energy=beam_energy)
-    dp.set_ai(center=([detector_size / 2, detector_size / 2]))
+    dp.set_ai(center=center)
     return dp, vs
 
 @op

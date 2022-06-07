@@ -16,17 +16,18 @@ def add_noise_to_simulation(simulation_arr, snr, int_salt, ):
         im[mask == 2] = int_max  # pepper noise
         return im
 
-    # Add poisson noise on sp noise and normalise
+    # Add poisson noise on sp noise and normalise (if int_salt == 0, no noise added)
     im = simulation_arr.copy()
-    im += np.random.poisson(im)
-    max = im.max()
-    if max == 0:
-        im = im
-    else:
-        im = im / im.max()
-    # Add bright spots randomly accross detector
-    im_sp = addsalt_pepper(im, snr, )
-    return im_sp
+    if int_salt != 0:
+        im += np.random.poisson(im)
+        max = im.max()
+        if max == 0:
+            im = im
+        else:
+            im = im / im.max()
+        # Add bright spots randomly accross detector
+        im = addsalt_pepper(im, snr, )
+    return im
 
 
 def add_background_to_signal_array(normalised_sim_data_array, x_axis,
@@ -40,10 +41,10 @@ def add_background_to_signal_array(normalised_sim_data_array, x_axis,
     """
 
     def inv_q(x, A, tau):
-        return A * x ** (-tau)
+        return A[:, np.newaxis] * x ** (-tau[:, np.newaxis])
 
     def exp_decay(x, A, tau):
-        return A * np.exp(- tau * x)
+        return A[:, np.newaxis] * np.exp(- tau[:, np.newaxis] * x)
 
     if bkg_function == 'exp_decay':
         bkg = exp_decay(x_axis, a_val, tau_val)
@@ -52,8 +53,8 @@ def add_background_to_signal_array(normalised_sim_data_array, x_axis,
 
     if dimensions == 1:
         return normalised_sim_data_array + bkg
-
     elif dimensions == 2:
-        n = normalised_sim_data_array.shape[-1]
-        bkg = np.tile(bkg, (n, 1)).T
+        # n = normalised_sim_data_array.shape[-1]
+        # bkg = np.tile(bkg, (n, 1)).T
+        # TODO: Inplement add bkg to 2D signals
         return normalised_sim_data_array + bkg

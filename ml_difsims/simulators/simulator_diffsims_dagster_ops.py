@@ -1,4 +1,5 @@
 # Packages
+import math
 
 import numpy as np
 import dask.array as da
@@ -70,13 +71,14 @@ def get_euler_angle_lists(vs):
     orientation_list_path = os.path.join(root, vs.orientations_parameters.ori_files_location_from_root)
     orientation_files_list = vs.orientations_parameters.orientation_files_list
     orientation_sampling_mode = vs.orientations_parameters.orientation_sampling_mode
-    orientation_list = [s.replace('xxxx', orientation_sampling_mode) for s in orientation_files_list]
     phase_names = get_phases_keys(vs)
+    seed = vs.random_seed
 
     if not use_orix_sampling:
         euler_list_n = get_random_euler(n_points, len(phase_names))
     else:
-        euler_list_n = load_orientation_list(orientation_list, orientation_list_path, n_points)
+        euler_list_n = load_orientation_list(orientation_files_list, orientation_sampling_mode, orientation_list_path, n_points, seed)
+
     get_dagster_logger().info(f'{euler_list_n.shape}, phases, n angle points, 3coordinates')
     setattr(vs, 'euler_list_n', euler_list_n)
     return euler_list_n, vs
@@ -159,9 +161,7 @@ def get_simulation_library(vs, i_relrod, key, phase, euler):
         relrod_length = relrod_list[i_relrod]
 
     phase_dict_temp = {key: phase}
-    library = create_diffraction_library(phase_dict_temp, [[euler]], beam_energy, scattering_params,
-                                         relrod_length, calibration, detector_size,
-                                         simulated_direct_beam_bool)
+    library = create_diffraction_library(phase_dict_temp, [[euler]], beam_energy, scattering_params,relrod_length, calibration, detector_size,simulated_direct_beam_bool)
 
     lib_entry = library.get_library_entry(phase=key, angle=euler)['Sim']
 
@@ -171,7 +171,7 @@ def get_simulation_library(vs, i_relrod, key, phase, euler):
     else:
         lib_entry_mod = lib_entry
 
-    return library, lib_entry
+    return library, lib_entry_mod
 
 @op
 def get_diffraction_pattern(lib_entry_mod, vs, i_sigma):
@@ -212,26 +212,41 @@ def add_noise_to_pyxem_dp(dp, vs):
     snrs = vs.data_augmentation_parameters.noise_addition.snrs
     intensity_spikes = vs.data_augmentation_parameters.noise_addition.intensity_spikes
 
-    # Data amplification with noise
-    if add_noise:
-
+    # If add_noise is false:
+    if not add_noise:
+        return dp
+    else:
         training_data_noisy = []
         # Include the non-corrupted data in the dataset?
         if include_also_non_noisy_simulation:
             training_data_noisy.append(dp)
 
-        # Append noisy data
-        for snr in snrs:
-            for int_spike in intensity_spikes:
-                signal_noisy = dp.map(add_noise_to_simulation,
-                                      snr=snr, int_salt=int_spike,
-                                      inplace=False, parallel=True)
+        # Data amplification with a random subset of the param space
+        if add_noise == 'random':
+            nav_shape = dp.axes_manager.navigation_shape
+            nav_size = math.prod(nav_shape)
 
-                training_data_noisy.append(signal_noisy)
+            snr = random.choices(snrs, k=nav_size)
+            int_spike = random.choices(intensity_spikes, k=nav_size)
+            snr = np.reshape(snr, nav_shape)
+            int_spike = np.reshape(int_spike, nav_shape)
+            snr = hs.signals.BaseSignal(snr).T
+            int_spike = hs.signals.BaseSignal(int_spike).T
+            signal_noisy = dp.map(add_noise_to_simulation,
+                                  snr=snr, int_salt=int_spike,
+                                  inplace=False, parallel=True)
+            training_data_noisy.append(signal_noisy)
+        # Data amplification with all param space
+        else:
+            for snr in snrs:
+                for int_spike in intensity_spikes:
+                    signal_noisy = dp.map(add_noise_to_simulation,
+                                          snr=snr, int_salt=int_spike,
+                                          inplace=False, parallel=True)
+
+                    training_data_noisy.append(signal_noisy)
 
         return hs.stack(training_data_noisy, axis=0, signal_type='electron_diffraction')
-    else:
-        return dp
 
 @op
 def radially_integrate_1d(dp, vs):
@@ -242,24 +257,6 @@ def radially_integrate_1d(dp, vs):
 def radially_integrate_2d(dp, vs):
     radial_steps = vs.radial_steps
     return dp.get_azimuthal_integral2d(npt=radial_steps, )
-
-# Post processing ops
-@op
-def crop_and_rebin_individually_1d(vs, range, dp):
-    cropping_start_k = vs.postprocessing_parameters.cropping_start_k
-    cropping_stop_k = vs.postprocessing_parameters.cropping_stop_k
-    cropped_signal_k_points = vs.postprocessing_parameters.cropped_signal_k_points
-
-    percent = random.choice(range) / 100
-    cropping_start_k_temp = (1 + percent) * cropping_start_k
-    cropping_stop_k_temp = (1 + percent) * cropping_stop_k
-    try:
-        dp.crop_signal1D(cropping_start_k_temp, cropping_stop_k_temp)
-    except ValueError:
-        dp.crop_signal1D(cropping_start_k, cropping_stop_k)
-
-    return rebin_signal(dp, cropped_signal_k_points).data
-
 
 #%%
 @op(out={"a": Out(), "b": Out(), "c": Out(), "d": Out()})
@@ -400,10 +397,27 @@ def merge_peak_position_dictionary(peak_position_dict_list, phase_dict):
 def get_qx_axis_array(qx_axis_list):
     return qx_axis_list[0]
 
+# Post-processing ops
+@op
+def crop_and_rebin_individually_1d(vs, range, dp):
+    cropping_start_k = vs.postprocessing_parameters.cropping_start_k
+    cropping_stop_k = vs.postprocessing_parameters.cropping_stop_k
+    cropped_signal_k_points = vs.postprocessing_parameters.cropped_signal_k_points
+
+    percent = random.choice(range) / 100
+    cropping_start_k_temp = (1 + percent) * cropping_start_k
+    cropping_stop_k_temp = (1 + percent) * cropping_stop_k
+    try:
+        dp.crop_signal1D(cropping_start_k_temp, cropping_stop_k_temp)
+    except ValueError:
+        dp.crop_signal1D(cropping_start_k, cropping_stop_k)
+
+    return rebin_signal(dp, cropped_signal_k_points).data
+
 @op(out={"data": Out(), "data_k": Out(), "data_px": Out(), "labels": Out()})
 def post_processing_1d(vs, data, qx_axis, phase_dict):
     sqrt_signal = vs.postprocessing_parameters.sqrt_signal
-    add_background_to = vs.data_augmentation_parameters.background_parameters.add_background_to
+    add_background_to_1d = vs.data_augmentation_parameters.background_parameters.add_background_to_1d
     cropping_start_k = vs.postprocessing_parameters.cropping_start_k
     cropping_stop_k = vs.postprocessing_parameters.cropping_stop_k
     cropped_signal_k_points = vs.postprocessing_parameters.cropped_signal_k_points
@@ -411,6 +425,7 @@ def post_processing_1d(vs, data, qx_axis, phase_dict):
     cropping_start_px = vs.postprocessing_parameters.cropping_start_px
     cropping_stop_px = vs.postprocessing_parameters.cropping_stop_px
     radial_integration_1d = vs.detector_geometry.radial_integration_1d
+    include_also_non_noisy_simulation = vs.data_augmentation_parameters.noise_addition.include_also_non_noisy_simulation
 
     if radial_integration_1d:
         # Sqrt signal (if wanted)
@@ -419,7 +434,7 @@ def post_processing_1d(vs, data, qx_axis, phase_dict):
 
         # Add simulated background
         # Approximate background as a $A * exp ^ {(-tau \: q)}$ value.
-        if add_background_to == '1d':
+        if add_background_to_1d is not False:
             # Normalise
             dpmax = data.max(2).compute()
             data_norm = data / dpmax[:, :, np.newaxis]
@@ -429,13 +444,32 @@ def post_processing_1d(vs, data, qx_axis, phase_dict):
 
             a_vals = vs.data_augmentation_parameters.background_parameters.a_vals
             tau_vals = vs.data_augmentation_parameters.background_parameters.tau_vals
-            for a in a_vals:
-                for i, tau in enumerate(tau_vals):
-                    bkg_data = add_background_to_signal_array(data_norm, qx_axis, a, tau)
-                    if i == 0:
-                        data = da.hstack((data_norm, bkg_data))
-                    else:
-                        data = da.hstack((data, bkg_data))
+            # Data amplification with a random subset of the param space
+            if add_background_to_1d == 'random':
+                nav_shape = data_norm.shape[:-1]
+                nav_size = math.prod(nav_shape)
+
+                tau = random.choices(tau_vals, k=nav_size)
+                a = random.choices(a_vals, k=nav_size)
+                tau = np.reshape(tau, nav_size)
+                a = np.reshape(a, nav_size)
+
+                data_norm_1dnav = np.reshape(data_norm, (nav_size, data_norm.shape[-1]))
+                bkg_data = add_background_to_signal_array(data_norm_1dnav, qx_axis, a, tau)
+                bkg_data = np.reshape(bkg_data, data_norm.shape)
+                if include_also_non_noisy_simulation:
+                    data = da.hstack((data_norm, bkg_data))
+                else:
+                    data = bkg_data
+            else:
+                for i, a in enumerate(a_vals):
+                    for tau in tau_vals:
+                        a, tau = np.array([a]), np.array([tau])
+                        bkg_data = add_background_to_signal_array(data_norm, qx_axis, a, tau)
+                        if i == 0:
+                            data = da.hstack((data_norm, bkg_data))
+                        else:
+                            data = da.hstack((data, bkg_data))
 
         ## Crop, rebin and normalise on pixel coords
         # Crop in pixel units:

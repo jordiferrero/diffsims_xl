@@ -27,21 +27,43 @@ def get_random_euler(npoints, n_phases):
     return euler_n
 
 
-def load_orientation_list(orientation_file_path_list, orientation_file_folder, npoints):
-    for i, f in enumerate(orientation_file_path_list):
-        random.seed(seed)
-        oris = np.load(os.path.join(orientation_file_folder, f))
-        rand_indeces = random.choices(np.arange(0, oris.shape[0]), k=npoints)
-        oris = oris[rand_indeces, :]
+def load_orientation_list(general_oris_list, sampling_mode, ori_folder, npoints, seed):
+    random.seed(seed)
+    # Randomise between all sampling modes
+    if len(sampling_mode) > 1:
+        for i, gen_f in enumerate(general_oris_list):
+            for j, samp_mode in enumerate(sampling_mode):
+                f = gen_f.replace('xxxx', samp_mode)
+                oris = np.load(os.path.join(ori_folder, f))
+                if j == 0:
+                    all_oris_temp = oris
+                else:
+                    all_oris_temp = np.vstack([all_oris_temp, oris])
 
-        if i == 0:
-            euler_n = oris
-        else:
-            euler_n = np.vstack([euler_n, oris])
+            rand_indeces = random.choices(np.arange(0, all_oris_temp.shape[0]), k=npoints)
+            all_oris_temp = all_oris_temp[rand_indeces, :]
 
-    new_shape = (len(orientation_file_path_list), len(oris), 3)
+            if i == 0:
+                euler_n = all_oris_temp
+            else:
+                euler_n = np.vstack([euler_n, all_oris_temp])
+
+    # Pick only one sampling mode
+    else:
+        orientation_file_path_list = [s.replace('xxxx', sampling_mode[0]) for s in general_oris_list]
+        for i, f in enumerate(orientation_file_path_list):
+            oris = np.load(os.path.join(ori_folder, f))
+            rand_indeces = random.choices(np.arange(0, oris.shape[0]), k=npoints)
+            oris = oris[rand_indeces, :]
+
+            if i == 0:
+                euler_n = oris
+            else:
+                euler_n = np.vstack([euler_n, oris])
+
+    new_shape = (len(general_oris_list), npoints, 3)
     euler_n = np.reshape(euler_n, new_shape)
-    return (euler_n)
+    return euler_n
 
 
 def get_reciprocal_radius(detector_size, calibration):

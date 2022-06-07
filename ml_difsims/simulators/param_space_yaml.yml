@@ -4,21 +4,18 @@
 sim_params: !pspace
 
   root_path: 'G:/My Drive/PhD/projects/external_measurements/ml_difsims'
-  simulation_orientations_chunk_size: 100
+  simulation_orientations_chunk_size: 5000
   random_seed: 10
   save_relpath: 'data/simulations'
 
   structure_parameters:
     phase_files_location_from_root: 'models/crystal_phases'
     phase_files: ['p4mbm_scaled_mixed_halide.cif', 'gratia_2h.cif', 'pbi2_2h.cif']
-    add_bkg_phase: !pdim
-      default: False
-      values: [True, False]
-    scattering_params: !pdim
-      default: 'lobato'
-      values: ['lobato', 'xtables' ]
+    add_bkg_phase: False
+    scattering_params: 'lobato'
 
   calibration_parameters:
+    # if more than 1 value is passed, it will take the mean.
     calibration_value: [0.00588]
     # It will disturb the calibration value by % when cropping in the q space. In None, nothing happens.
     calibration_modify_percent: !pdim
@@ -32,46 +29,34 @@ sim_params: !pspace
       values: [True, False]
     ori_files_location_from_root: 'models/orix_orientation_full_lists'
     orientation_files_list: ['orientations_pg422_3_xxxx.npy', 'orientations_pg622_3_xxxx.npy', 'orientations_pg32_3_xxxx.npy']
-    orientation_sampling_mode: !pdim
-      default: 'cubo'
-      values: ['cubo', 'euler', 'quat']
+    orientation_sampling_mode: ['cubo', 'euler', 'quat']
+    # If array with more than 1 name is passed, it will randomly pick orientations from all modes.
 
   data_augmentation_parameters:
     peak_removal:
       # Finds n brightest peaks to remove from. n_intensity_peaks >= n_peaks_to_remove
-      remove_peaks_from_diffraction_library: !pdim
-        default: True
-        values: [True, False]
+      remove_peaks_from_diffraction_library: True
       # Removes n amount of peaks of the brightest ones.
       n_intensity_peaks: 20
       num_peaks_to_remove: 'random'
 
     noise_addition:
-      add_noise: !pdim
-        default: False
-        values: [True, False]
-      include_also_non_noisy_simulation: True
-      snrs: !pdim
-        default: [0.9, 0.99]
-        values: [[0.9, 0.99], [0.9, 0.99, 0.999, 0.9999]]
-      intensity_spikes: !pdim
-        default: [0.25,]
-        values: [[0.25], [0.1, 0.25, 0.50, 0.75]]
+      add_noise: 'random'
+      # Can be True (will iterate though all param space), False or 'random'-ly select a subset
+      include_also_non_noisy_simulation: False
+      snrs: [0.9, 0.99, 0.999, 0.9999]
+      # Probability of salt-pepper noise
+      intensity_spikes: [0, 0.1, 0.25, 0.50, 0.75]
+      # If intensity_spikes == 0, no noise is added
 
     background_parameters:
-      add_background_to: !pdim
-        default: 'none'
-        values: ['1d', 'none']
-      a_vals: !pdim
-        default: [1., 5.]
-        values: [[1., 5.], [0.1, 1., 10.]]
-      tau_vals: !pdim
-        default: [0.5, 1.5]
-        values: [[0.5, 1.5], [0.1, 0.5, 1.0, 1.5, 2.0, 2.5]]
+      # Can be True (will iterate though all param space), False or 'random'-ly select a subset
+      add_background_to_1d: 'random'
+      a_vals: [0, 0.1, 1., 5. 10.]
+      # If a_val == 0, no background is added
+      tau_vals: [0.1, 0.5, 1.0, 1.5, 2.0, 2.5]
 
-    simulated_direct_beam_bool: !pdim
-      default: False
-      values: [ True, False ]
+    simulated_direct_beam_bool: False
 
   relrod_parameters:
     randomise_relrod: True
@@ -83,9 +68,7 @@ sim_params: !pspace
 
   detector_geometry:
     detector_size: 515
-    beam_energy: !pdim
-      default: 200.0
-      values: [200., 300.]
+    beam_energy: 200.
     detector_pix_size: 55e-6
     detector_type: 'Medipix515x515Detector'
     radial_integration_1d: True

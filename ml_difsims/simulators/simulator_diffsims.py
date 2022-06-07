@@ -73,11 +73,11 @@ json_vars = {
             # If 'random' is passed, it will randomise this value between 0 and n_intensity_peaks.
         },
         "noise_addition": {
-            "add_noise": False,
+            "add_noise": True,
             "include_also_non_noisy_simulation": False,
             # If add noise, do you want to also have the non-noisy data?
             "snrs": [0.9, 0.99],
-            "intensity_spikes": [0.25, ],
+            "intensity_spikes": [0, 0.25, ],
         },
         "background_parameters": {
             "add_background_to": 'none',
@@ -219,7 +219,7 @@ from ml_difsims.simulators.simulation_utils import *
 if not use_orix_sampling:
     euler_list_n = get_random_euler(n_points, len(phase_dict.keys()))
 else:
-    euler_list_n = load_orientation_list(orientation_list, orientation_list_path, n_points)
+    euler_list_n = load_orientation_list(orientation_list, orientation_sampling_mode, orientation_list_path, n_points, seed)
 
 n_angle_points = int(euler_list_n.shape[1])
 
@@ -401,9 +401,6 @@ for i, (key, phase) in enumerate(phase_dict.items()):
 
 data_peak_pos = json.dumps(data_peak_pos)
 
-print(data)
-print(data_2d)
-print(data_peak_pos)
 
 # %%
 from ml_difsims.utils.postprocessing_utils import *
@@ -623,3 +620,44 @@ db_collection.insert_one(json_vars)
 # del training_data_1D_q
 
 # %%
+def add_background_to_signal_array(normalised_sim_data_array, x_axis,
+                                   a_val, tau_val, bkg_function='exp_decay', dimensions=1):
+    """
+    :param normalised_sim_data_array:
+        The normalised 1d signal array (nav axis should be (points, phases, q))
+    :param x_axis: array of the actual q values
+        The A and tau values are optimised for 1/A-1 magnitude
+    :return: extended signal with new sets of sim data without and with bakgrounds
+    """
+
+    def inv_q(x, A, tau):
+        return A[:, np.newaxis] * x ** (-tau[:, np.newaxis])
+
+    def exp_decay(x, A, tau):
+        return A[:, np.newaxis] * np.exp(- tau[:, np.newaxis] * x)
+
+    if bkg_function == 'exp_decay':
+        bkg = exp_decay(x_axis, a_val, tau_val)
+    elif bkg_function == 'inv_q':
+        bkg = inv_q(x_axis, a_val, tau_val)
+
+    if dimensions == 1:
+        return normalised_sim_data_array + bkg
+    elif dimensions == 2:
+        # n = normalised_sim_data_array.shape[-1]
+        # bkg = np.tile(bkg, (n, 1)).T
+        # TODO: Inplement add bkg to 2D signals
+        return normalised_sim_data_array + bkg
+
+#%%
+import math
+nav_shape = data_px.shape[:-1]
+nav_size = math.prod(nav_shape)
+tau = random.choices(tau_vals, k=nav_size)
+a = random.choices(a_vals, k=nav_size)
+tau = np.reshape(tau, nav_shape)
+a = np.reshape(a, nav_shape)
+data_norm = data_px.compute()
+
+bkg = add_background_to_signal_array(data_norm, qx_axis, np.array([1.]), np.array([2.]))
+

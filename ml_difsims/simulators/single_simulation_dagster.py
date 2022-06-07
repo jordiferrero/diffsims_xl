@@ -3,7 +3,7 @@ from ml_difsims.simulators.simulator_diffsims_dagster_ops import *
 import json
 
 json_vars_example = json.dumps({
-        "root_path": 'C:/Users/Sauron/Documents/GitHub/strankslab/ml_difsims',
+        "root_path": 'G:\My Drive\PhD\projects\external_measurements\ml_difsims',
         "structure_parameters": {
             "phase_files_location_from_root": "models/crystal_phases",
             "phase_files": ['p4mbm_scaled_mixed_halide.cif', 'gratia_2h.cif', 'pbi2_2h.cif'],
@@ -24,7 +24,7 @@ json_vars_example = json.dumps({
             "orientation_files_list": ['orientations_pg422_3_xxxx.npy',
                                        'orientations_pg622_3_xxxx.npy',
                                        'orientations_pg32_3_xxxx.npy'],
-            "orientation_sampling_mode": 'cubo',
+            "orientation_sampling_mode": ['cubo', 'euler', 'quat']
         },
         "data_augmentation_parameters": {
             "peak_removal": {
@@ -36,16 +36,16 @@ json_vars_example = json.dumps({
                 # If 'random' is passed, it will randomise this value between 0 and n_intensity_peaks.
             },
             "noise_addition": {
-                "add_noise": True,
-                "include_also_non_noisy_simulation": True,
+                "add_noise": 'random',
+                "include_also_non_noisy_simulation": False,
                 # If add noise, do you want to also have the non-noisy data?
                 "snrs": [0.9, 0.99],
-                "intensity_spikes": [0.25, 0.50],
+                "intensity_spikes": [0, 0.25, 0.50],
             },
             "background_parameters": {
-                "add_background_to": '1d',
+                "add_background_to_1d": True,
                 # Select from '1d' or 'none'
-                "a_vals": [1., 5.],
+                "a_vals": [0, 1., 5.],
                 # A: pre-exp factor, tau: decay time constant
                 "tau_vals": [0.5, 1.5],
             },

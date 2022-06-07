@@ -14,7 +14,7 @@ json_vars_example = json.dumps({
         "calibration_parameters": {
             "calibration_value": [0.00588,],
             #  List of 1 value only for now
-            "calibration_modify_percent": 5,
+            "calibration_modify_percent": 0,
             # It will disturb the calibration value by % when cropping in the q space. In None, nothing happens.
         },
         "orientations_parameters": {

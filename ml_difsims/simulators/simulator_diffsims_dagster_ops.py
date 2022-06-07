@@ -156,11 +156,17 @@ def get_simulation_library(vs, i_relrod, key, phase, euler):
     remove_peaks_from_diffraction_library = vs.data_augmentation_parameters.peak_removal.remove_peaks_from_diffraction_library
     n_intensity_peaks = vs.data_augmentation_parameters.peak_removal.n_intensity_peaks
     num_peaks_to_remove = vs.data_augmentation_parameters.peak_removal.num_peaks_to_remove
+    calibration_modify_percent = vs.calibration_parameters.calibration_modify_percent
 
     if randomise_relrod:
         relrod_length = random.choice(relrod_list)
     else:
         relrod_length = relrod_list[i_relrod]
+
+    if calibration_modify_percent != 0:
+        modify_percent = np.random.uniform(low=-calibration_modify_percent, high=calibration_modify_percent)
+
+        calibration = calibration * (1 + modify_percent / 100)
 
     phase_dict_temp = {key: phase}
     library = create_diffraction_library(phase_dict_temp, [[euler]], beam_energy, scattering_params,relrod_length, calibration, detector_size,simulated_direct_beam_bool)

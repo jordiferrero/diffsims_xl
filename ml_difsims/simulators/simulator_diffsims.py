@@ -51,7 +51,7 @@ json_vars = {
     "calibration_parameters": {
         "calibration_value": [0.00588, ],
         #  List of 1 value only for now
-        "calibration_modify_percent": 5,
+        "calibration_modify_percent": 0.01,
         # It will disturb the calibration value by % when cropping in the q space. In None, nothing happens.
     },
     "orientations_parameters": {
@@ -283,8 +283,15 @@ for i, (key, phase) in enumerate(phase_dict.items()):
                     relrod_length = relrod_list[j]
 
                 phase_dict_temp = {key: phase}
+
+                calibration_temp = calibration
+                if calibration_modify_percent != 0:
+                    modify_percent = np.random.uniform(low=-calibration_modify_percent, high=calibration_modify_percent)
+
+                    calibration_temp = calibration * (1 + modify_percent / 100)
+
                 library = create_diffraction_library(phase_dict_temp, [[euler]], beam_energy, scattering_params,
-                                                     relrod_length, calibration, detector_size,
+                                                     relrod_length, calibration_temp, detector_size,
                                                      simulated_direct_beam_bool)
 
                 # Get coordinates from simulation

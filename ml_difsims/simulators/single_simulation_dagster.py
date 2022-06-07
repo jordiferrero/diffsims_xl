@@ -6,7 +6,7 @@ json_vars_example = json.dumps({
         "root_path": 'G:\My Drive\PhD\projects\external_measurements\ml_difsims',
         "structure_parameters": {
             "phase_files_location_from_root": "models/crystal_phases",
-            "phase_files": ['p4mbm_scaled_mixed_halide.cif', 'gratia_2h.cif', 'pbi2_2h.cif'],
+            "phase_files": ['p4mbm_scaled_mixed_halide.cif'], #, 'gratia_2h.cif', 'pbi2_2h.cif'],
             "add_bkg_phase": True,
             # Do you want to add a bkg/just noise phase at the end? If True, the final datasets will be phases + 1 shape.
             "scattering_params": 'lobato',
@@ -28,7 +28,7 @@ json_vars_example = json.dumps({
         },
         "data_augmentation_parameters": {
             "peak_removal": {
-                "remove_peaks_from_diffraction_library": True,
+                "remove_peaks_from_diffraction_library": False,
                 "n_intensity_peaks": 20,
                 # Finds n brightest peaks to remove from. n_intensity_peaks >= n_peaks_to_remove
                 "num_peaks_to_remove": 'random',
@@ -36,20 +36,20 @@ json_vars_example = json.dumps({
                 # If 'random' is passed, it will randomise this value between 0 and n_intensity_peaks.
             },
             "noise_addition": {
-                "add_noise": 'random',
+                "add_noise": False,
                 "include_also_non_noisy_simulation": False,
                 # If add noise, do you want to also have the non-noisy data?
                 "snrs": [0.9, 0.99],
                 "intensity_spikes": [0, 0.25, 0.50],
             },
             "background_parameters": {
-                "add_background_to_1d": True,
-                # Select from '1d' or 'none'
+                "add_background_to_1d": False,
+                # Select from bool or 'random'
                 "a_vals": [0, 1., 5.],
                 # A: pre-exp factor, tau: decay time constant
                 "tau_vals": [0.5, 1.5],
             },
-            "simulated_direct_beam_bool": True,
+            "simulated_direct_beam_bool": False,
         },
         "relrod_parameters": {
             "randomise_relrod": True,
@@ -68,11 +68,14 @@ json_vars_example = json.dumps({
             "wavelength": 2.5079e-12,
             "detector_pix_size": 55e-6,
             "detector_type": "Medipix515x515Detector",
-            "radial_integration_1d": True,
-            "radial_integration_2d": True,
-            "save_peak_position_library": True,
+            "radial_integration_1d": False,
+            "radial_integration_2d": False,
+            "save_peak_position_library": False,
         },
         "postprocessing_parameters": {
+            "crop_in_k": False,
+            "crop_in_px": False,
+            "save_full_scan": False,
             "cropping_start_k": 0.11,
             "cropping_stop_k": 1.30,
             "cropped_signal_k_points": 147,
@@ -80,6 +83,7 @@ json_vars_example = json.dumps({
             "cropping_start_px": 13,
             "cropping_stop_px": 160,
             "sqrt_signal": True,
+            "save_md_to_mongodb": False,
         },
         "random_seed": 10,
         "save_relpath": 'data/simulations',

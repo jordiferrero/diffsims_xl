@@ -72,10 +72,13 @@ sim_params: !pspace
     detector_pix_size: 55e-6
     detector_type: 'Medipix515x515Detector'
     radial_integration_1d: True
-    radial_integration_2d: True
-    save_peak_position_library: True
+    radial_integration_2d: False
+    save_peak_position_library: False
 
   postprocessing_parameters:
+    crop_in_k: False
+    crop_in_px: True
+    save_full_scan: True
     cropping_start_k: 0.11
     cropping_stop_k: 1.30
     cropped_signal_k_points: 147
@@ -84,3 +87,4 @@ sim_params: !pspace
     sqrt_signal: !pdim
       default: False
       values: [True, False]
+    save_md_to_mongodb: True

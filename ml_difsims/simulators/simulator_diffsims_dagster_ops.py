@@ -1,6 +1,6 @@
 # Packages
 import math
-
+from datetime import datetime
 import numpy as np
 import dask.array as da
 import hyperspy.api as hs
@@ -19,6 +19,8 @@ import os
 import random
 import uuid
 import requests
+
+from mongodb.pymongo_connect import connect_to_mongo_database
 
 default_policy = RetryPolicy(max_retries=3)
 
@@ -59,7 +61,7 @@ def create_phase_dict(vs):
         phase_dict[name] = diffpy.structure.loadStructure(os.path.join(structures_path, phase))
     get_dagster_logger().info(f'n_phases = {len(phase_dict)}')
     get_dagster_logger().info(f'{[key for key in phase_dict.keys()]}')
-    setattr(vs, 'phase_dict', phase_dict)
+    # setattr(vs, 'phase_dict', phase_dict)
     return phase_dict, vs
 
 # Get euler angle lists
@@ -80,7 +82,7 @@ def get_euler_angle_lists(vs):
         euler_list_n = load_orientation_list(orientation_files_list, orientation_sampling_mode, orientation_list_path, n_points, seed)
 
     get_dagster_logger().info(f'{euler_list_n.shape}, phases, n angle points, 3coordinates')
-    setattr(vs, 'euler_list_n', euler_list_n)
+    # setattr(vs, 'euler_list_n', euler_list_n)
     return euler_list_n, vs
 
 # If add bkg phase, add a last phase with any cif file (the atoms will be ignored later)
@@ -90,8 +92,8 @@ def make_changes_to_add_bkg_phase(vs, phase_dict, euler_list_n):
     if add_bkg_phase:
         phase_dict['background'] = list(phase_dict.values())[-1]
         euler_list_n = np.vstack((euler_list_n, [euler_list_n[-1]]))
-        setattr(vs, 'phase_dict', phase_dict)
-        setattr(vs, 'euler_list_n', euler_list_n)
+        # setattr(vs, 'phase_dict', phase_dict)
+        # setattr(vs, 'euler_list_n', euler_list_n)
     return phase_dict, euler_list_n, vs
 
 # Randomisation
@@ -360,38 +362,42 @@ def process_each_chunk(chunk, vs):
     return chunk_rad_data, chunk_rad_data_2d, chunk_peak_pos, qx_axis
 
 @op()
-def merge_dict_chunk_to_dask_arr(data_list, phase_dict):
-    key_list = [k for k in phase_dict.keys()]
-    phase_dat_dict = {key: None for key in key_list}
+def merge_dict_chunk_to_dask_arr(data_list, phase_dict, bool_proceed):
+    if bool_proceed:
+        key_list = [k for k in phase_dict.keys()]
+        phase_dat_dict = {key: None for key in key_list}
 
-    for dictionary in data_list:
-        key = [k for k in dictionary.keys()][0]
-        dat = dictionary[key]
-        try:
-            phase_dat_dict[key] = da.vstack((phase_dat_dict[key], dat))
-        except ValueError:
-            phase_dat_dict[key] = dat
+        for dictionary in data_list:
+            key = [k for k in dictionary.keys()][0]
+            dat = dictionary[key]
+            try:
+                phase_dat_dict[key] = da.vstack((phase_dat_dict[key], dat))
+            except ValueError:
+                phase_dat_dict[key] = dat
 
-    data = da.array([])
-    for i, dat in enumerate(phase_dat_dict.values()):
-        if i == 0:
-            data = [dat]
-        else:
-            data = da.vstack((data, [dat]))
-    return data
-
+        data = da.array([])
+        for i, dat in enumerate(phase_dat_dict.values()):
+            if i == 0:
+                data = [dat]
+            else:
+                data = da.vstack((data, [dat]))
+        return data
+    else:
+        return None
 @op()
-def merge_peak_position_dictionary(peak_position_dict_list, phase_dict):
-    key_list = [k for k in phase_dict.keys()]
-    data_peak_pos = {key: [] for key in key_list}
-    for chunk_element_dict in peak_position_dict_list:
-        # Get a dictionary with "key" and list of pos_dict
-        key = [k for k in chunk_element_dict.keys()][0]
-        chunk_peak_pos_dict_list = chunk_element_dict[key]
-        data_peak_pos[key].append(chunk_peak_pos_dict_list)
+def merge_peak_position_dictionary(peak_position_dict_list, phase_dict, bool_proceed):
+    if bool_proceed:
+        key_list = [k for k in phase_dict.keys()]
+        data_peak_pos = {key: [] for key in key_list}
+        for chunk_element_dict in peak_position_dict_list:
+            # Get a dictionary with "key" and list of pos_dict
+            key = [k for k in chunk_element_dict.keys()][0]
+            chunk_peak_pos_dict_list = chunk_element_dict[key]
+            data_peak_pos[key].append(chunk_peak_pos_dict_list)
 
-    data_peak_pos = json.dumps(data_peak_pos)
-    return data_peak_pos
+        data_peak_pos = json.dumps(data_peak_pos)
+        return data_peak_pos
+    return None
 
 @op()
 def get_qx_axis_array(qx_axis_list):
@@ -424,6 +430,9 @@ def post_processing_1d(vs, data, qx_axis, phase_dict):
     calibration_modify_percent = vs.calibration_parameters.calibration_modify_percent
     cropping_start_px = vs.postprocessing_parameters.cropping_start_px
     cropping_stop_px = vs.postprocessing_parameters.cropping_stop_px
+    crop_in_k = vs.postprocessing_parameters.crop_in_k
+    crop_in_px = vs.postprocessing_parameters.crop_in_px
+    save_full_scan = vs.postprocessing_parameters.save_full_scan
     radial_integration_1d = vs.detector_geometry.radial_integration_1d
     include_also_non_noisy_simulation = vs.data_augmentation_parameters.noise_addition.include_also_non_noisy_simulation
 
@@ -472,65 +481,81 @@ def post_processing_1d(vs, data, qx_axis, phase_dict):
                             data = da.hstack((data, bkg_data))
 
         ## Crop, rebin and normalise on pixel coords
+        crop_in_k
+
+        save_full_scan
         # Crop in pixel units:
-        data_px = data[:, :, cropping_start_px: cropping_stop_px]
-        # Renormalise
-        dpmax = data_px.max(-1)
-        data_px = data_px / dpmax[:, :, np.newaxis]
-        # Correct any nan value
-        nan_mask = np.isnan(data_px)
-        data_px[nan_mask] = 0
+        if crop_in_px:
+            data_px = data[:, :, cropping_start_px: cropping_stop_px]
+            # Renormalise
+            dpmax = data_px.max(-1)
+            data_px = data_px / dpmax[:, :, np.newaxis]
+            # Correct any nan value
+            nan_mask = np.isnan(data_px)
+            data_px[nan_mask] = 0
+
+            # NN Requirements: Reshape and Labelling
+            data_px = data_px.reshape(-1, data_px.shape[-1])
+        else:
+            data_px = None
 
         ## Crop, rebin and normalise on k coords
         # Crop in k units:
-        data_s = pxm.signals.LazyElectronDiffraction1D(data)
-        data_s.compute()
+        if crop_in_k:
+            data_s = pxm.signals.LazyElectronDiffraction1D(data)
+            data_s.compute()
 
-        if calibration_modify_percent == (None or 0):
-            data_s = data_s.crop_signal1D(cropping_start_k, cropping_stop_k)
-            data_k = rebin_signal(data_s, cropped_signal_k_points).data
+            if calibration_modify_percent == (None or 0):
+                data_s = data_s.crop_signal1D(cropping_start_k, cropping_stop_k)
+                data_k = rebin_signal(data_s, cropped_signal_k_points).data
+            else:
+                range_percents_modification = np.linspace(-calibration_modify_percent, calibration_modify_percent, 20)
+
+                signals_temp = da.array([])
+                for i, nav in enumerate(data_s.inav[:]):
+                    nav_k = crop_and_rebin_individually_1d(vs, range_percents_modification, nav)
+                    if i == 0:
+                        signals_temp = da.array(nav_k)
+                    else:
+                        signals_temp = da.vstack((signals_temp, nav_k))
+
+                # Reshape back
+                shape_ori = list(data.shape)
+                shape_ori[-1] = cropped_signal_k_points
+                data_k = np.reshape(signals_temp, shape_ori)
+
+            data_k = da.array(data_k)
+            # Renormalise
+            dpmax = data_k.max(-1)
+            data_k = data_k / dpmax[:, :, np.newaxis]
+            # Correct any nan value
+            nan_mask = np.isnan(data_k)
+            data_k[nan_mask] = 0
+
+            # NN Requirements: Reshape and Labelling
+            data_k = data_k.reshape(-1, data_k.shape[-1])
         else:
-            range_percents_modification = np.linspace(-calibration_modify_percent, calibration_modify_percent, 20)
-
-            signals_temp = da.array([])
-            for i, nav in enumerate(data_s.inav[:]):
-                nav_k = crop_and_rebin_individually_1d(vs, range_percents_modification, nav)
-                if i == 0:
-                    signals_temp = da.array(nav_k)
-                else:
-                    signals_temp = da.vstack((signals_temp, nav_k))
-
-            # Reshape back
-            shape_ori = list(data.shape)
-            shape_ori[-1] = cropped_signal_k_points
-            data_k = np.reshape(signals_temp, shape_ori)
-
-        data_k = da.array(data_k)
-        # Renormalise
-        dpmax = data_k.max(-1)
-        data_k = data_k / dpmax[:, :, np.newaxis]
-        # Correct any nan value
-        nan_mask = np.isnan(data_k)
-        data_k[nan_mask] = 0
+            data_k = None
 
         # NN Requirements: Reshape and Labelling
-        data_px = data_px.reshape(-1, data_px.shape[-1])
-        data_k = data_k.reshape(-1, data_k.shape[-1])
         data = data.reshape(-1, data.shape[-1])
 
         # Create labels for 1D
         phase_names = list(phase_dict.keys())
         n_phases = len(phase_dict)
-        labels = np.zeros((n_phases, int(data_px.shape[0] / n_phases)))
+        labels = np.zeros((n_phases, int(data.shape[0] / n_phases)))
         for i in range(n_phases):
             labels[i, :] = i
         labels = labels.flatten()
+
+        if not save_full_scan:
+            data = None
     else:
         data, data_k, data_px, labels = None, None, None, None
 
     return data, data_k, data_px, labels
 
-@op(out={"data_2d_px": Out(), "labels_2d": Out()})
+@op(out={"data_2d": Out(), "data_2d_px": Out(), "labels_2d": Out()})
 def post_processing_2d(vs, data_2d, qx_axis, phase_dict):
     sqrt_signal = vs.postprocessing_parameters.sqrt_signal
     cropped_signal_k_points = vs.postprocessing_parameters.cropped_signal_k_points
@@ -538,6 +563,8 @@ def post_processing_2d(vs, data_2d, qx_axis, phase_dict):
     cropping_start_px = vs.postprocessing_parameters.cropping_start_px
     cropping_stop_px = vs.postprocessing_parameters.cropping_stop_px
     radial_integration_2d = vs.detector_geometry.radial_integration_2d
+    crop_in_px = vs.postprocessing_parameters.crop_in_px
+    save_full_scan = vs.postprocessing_parameters.save_full_scan
 
     if radial_integration_2d:
         # Sqrt signal (if wanted)
@@ -546,56 +573,72 @@ def post_processing_2d(vs, data_2d, qx_axis, phase_dict):
 
         # Add simulated background
         # TODO: Add 2d background simulation
+        if crop_in_px:
+            ## Crop, rebin and normalise on pixel coords
+            # # Crop in pixel units:
+            if calibration_modify_percent == (None or 0):
+                data_2d_px = data_2d[:, :, cropping_start_px: cropping_stop_px, :]
+            else:
+                # Calculate how many pixels the calibration tolerance factor corresponds to
+                detector_size = vs.detector_geometry.detector_size
+                radial_steps = int(np.ceil((int(detector_size / 2) - 1) / 2) * 2)
+                one_px_q = qx_axis.max() / radial_steps
+                max_q_range = calibration_modify_percent / 100 * qx_axis.max()
+                max_px_shift = max_q_range / one_px_q
+                range_percents_modification = np.arange(-max_px_shift, max_px_shift + 1, 1)
 
-        ## Crop, rebin and normalise on pixel coords
-        # # Crop in pixel units:
-        if calibration_modify_percent == (None or 0):
-            data_2d_px = data_2d[:, :, cropping_start_px: cropping_stop_px, :]
+                signals_temp_2d = da.array([])
+                for phase_2d in data_2d:
+                    for ori_2d in phase_2d:
+                        px_shift = random.choice(range_percents_modification) / 100
+                        temp = ori_2d[np.ceil(cropping_start_px + px_shift): np.ceil(cropping_stop_px + px_shift), :]
+                        try:
+                            signals_temp_2d = da.vstack((signals_temp_2d, temp))
+                        except ValueError:
+                            signals_temp_2d = da.array(temp)
+
+                # Reshape back
+                shape_ori = list(data_2d.shape)
+                shape_ori[-2] = cropped_signal_k_points
+                data_2d_px = da.reshape(signals_temp_2d, shape_ori)
+
+            # Renormalise
+            dpmax = data_2d_px.max([-2, -1])
+            data_2d_px = data_2d_px / dpmax[:, :, np.newaxis, np.newaxis]
+            # Correct any nan value
+            nan_mask = np.isnan(data_2d_px)
+            data_2d_px[nan_mask] = 0
+
+            # NN Requirements: Reshape and Labelling
+            data_2d_px = data_2d_px.reshape(-1, data_2d_px.shape[-2], data_2d_px.shape[-1])
         else:
-            # Calculate how many pixels the calibration tolerance factor corresponds to
-            detector_size = vs.detector_geometry.detector_size
-            radial_steps = int(np.ceil((int(detector_size / 2) - 1) / 2) * 2)
-            one_px_q = qx_axis.max() / radial_steps
-            max_q_range = calibration_modify_percent / 100 * qx_axis.max()
-            max_px_shift = max_q_range / one_px_q
-            range_percents_modification = np.arange(-max_px_shift, max_px_shift + 1, 1)
-
-            signals_temp_2d = da.array([])
-            for phase_2d in data_2d:
-                for ori_2d in phase_2d:
-                    px_shift = random.choice(range_percents_modification) / 100
-                    temp = ori_2d[np.ceil(cropping_start_px + px_shift): np.ceil(cropping_stop_px + px_shift), :]
-                    try:
-                        signals_temp_2d = da.vstack((signals_temp_2d, temp))
-                    except ValueError:
-                        signals_temp_2d = da.array(temp)
-
-            # Reshape back
-            shape_ori = list(data_2d.shape)
-            shape_ori[-2] = cropped_signal_k_points
-            data_2d_px = da.reshape(signals_temp_2d, shape_ori)
-
-        # Renormalise
-        dpmax = data_2d_px.max([-2, -1])
-        data_2d_px = data_2d_px / dpmax[:, :, np.newaxis, np.newaxis]
-        # Correct any nan value
-        nan_mask = np.isnan(data_2d_px)
-        data_2d_px[nan_mask] = 0
-
-        # NN Requirements: Reshape and Labelling
-        data_2d_px = data_2d_px.reshape(-1, data_2d_px.shape[-2], data_2d_px.shape[-1])
+            data_2d_px = None
 
         # Create labels for 2D
         n_phases = len(phase_dict)
-        labels_2d = np.zeros((n_phases, int(data_2d_px.shape[0] / n_phases)))
+        labels_2d = np.zeros((n_phases, int(data_2d.shape[0] / n_phases)))
         for i in range(n_phases):
             labels_2d[i, :] = i
         labels_2d = labels_2d.flatten()
+
+        if not save_full_scan:
+            data_2d = None
     else:
-        data_2d_px, labels_2d = None, None
+        data_2d, data_2d_px, labels_2d = None, None, None
 
-    return data_2d_px, labels_2d
+    return data_2d, data_2d_px, labels_2d
 
+
+@op()
+def save_metadata_to_mongodb(vs):
+    save_md_to_mongodb = vs.postprocessing_parameters.save_md_to_mongodb
+    id = vs.id
+    if save_md_to_mongodb:
+        db_collection = connect_to_mongo_database('simulations', f'{id}')
+        # Pass in the jason input file here
+        print(vs)
+        db_collection.insert_one(json.loads(json.dumps(vs, default=lambda o: o.__dict__)))
+    return
 #%%
 # Overall operations
 @graph(out={"data": GraphOut(), "data_2d": GraphOut(), "data_peak_pos": GraphOut(), "qx_axis": GraphOut(),})
@@ -611,29 +654,27 @@ def simulate_diffraction_data(vs, phase_dict, euler_list_n):
     chunk_rad_data, chunk_rad_data_2d, chunk_peak_pos, qx_axis = chunks.map(lambda chk: process_each_chunk(chk, vs))
 
     qx_axis = get_qx_axis_array(qx_axis.collect())
-    if radial_integration_1d:
-        data = merge_dict_chunk_to_dask_arr(chunk_rad_data.collect(), phase_dict)
 
-    if radial_integration_2d:
-        data_2d = merge_dict_chunk_to_dask_arr(chunk_rad_data_2d.collect(), phase_dict)
+    data = merge_dict_chunk_to_dask_arr(chunk_rad_data.collect(), phase_dict, radial_integration_1d)
 
-    if save_peak_position_library:
-        data_peak_pos = merge_peak_position_dictionary(chunk_peak_pos.collect(), phase_dict)
+    data_2d = merge_dict_chunk_to_dask_arr(chunk_rad_data_2d.collect(), phase_dict, radial_integration_2d)
+
+    data_peak_pos = merge_peak_position_dictionary(chunk_peak_pos.collect(), phase_dict, save_peak_position_library)
 
     get_dagster_logger().info(f'Simulation of data completed. Shape of 1d : {data}')
 
     return {"data": data, "data_2d": data_2d, "data_peak_pos": data_peak_pos, "qx_axis": qx_axis,}
 
 
-@graph(out={"data": GraphOut(), "data_k": GraphOut(), "data_px": GraphOut(), "labels": GraphOut(), "data_2d_px": GraphOut(), "labels_2d": GraphOut()})
+@graph(out={"data": GraphOut(), "data_k": GraphOut(), "data_px": GraphOut(), "labels": GraphOut(), "data_2d": GraphOut(), "data_2d_px": GraphOut(), "labels_2d": GraphOut()})
 def post_processing(vs, data, data_2d, qx_axis, phase_dict):
     data, data_k, data_px, labels = post_processing_1d(vs, data, qx_axis, phase_dict)
-    data_2d_px, labels_2d = post_processing_2d(vs, data_2d, qx_axis, phase_dict)
+    data_2d, data_2d_px, labels_2d = post_processing_2d(vs, data_2d, qx_axis, phase_dict)
 
-    return {"data": data, "data_k": data_k, "data_px": data_px, "labels": labels, "data_2d_px": data_2d_px, "labels_2d": labels_2d}
+    return {"data": data, "data_k": data_k, "data_px": data_px, "labels": labels, "data_2d": data_2d, "data_2d_px": data_2d_px, "labels_2d": labels_2d}
 
-@op
-def save_simulation(vs, data, data_k, data_px, labels, data_2d_px, labels_2d, data_peak_pos, phase_dict, qx_axis, json_vars_dump):
+@op(out={"vs": Out()})
+def save_simulation(vs, data, data_k, data_px, labels, data_2d, data_2d_px, labels_2d, data_peak_pos, phase_dict, qx_axis, json_vars_dump):
     calibration_modify_percent = vs.calibration_parameters.calibration_modify_percent
     radial_integration_1d = vs.detector_geometry.radial_integration_1d
     radial_integration_2d = vs.detector_geometry.radial_integration_2d
@@ -660,6 +701,10 @@ def save_simulation(vs, data, data_k, data_px, labels, data_2d_px, labels_2d, da
 
     get_dagster_logger().info(full_name)
 
+    # Get timestamp
+    time_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    setattr(vs, 'timestamp', time_stamp)
+
     # Create folder
     save_folder_path = os.path.join(vs.root_path, vs.save_relpath,)
     if not os.path.exists(save_folder_path):
@@ -682,6 +727,8 @@ def save_simulation(vs, data, data_k, data_px, labels, data_2d_px, labels_2d, da
 
         if radial_integration_2d:
             g = f.create_group('2d')
+            g.create_dataset('x_all', data=data_2d)
+            g.create_dataset('y_all', data=labels_2d)
             g.create_dataset('x_px', data=data_2d_px)
             g.create_dataset('y_px', data=labels_2d)
 
@@ -693,9 +740,10 @@ def save_simulation(vs, data, data_k, data_px, labels, data_2d_px, labels_2d, da
         g.attrs['phases'] = phase_names
         g.attrs['summary'] = full_name
         g.attrs['id'] = f"{vs.id}"
+        g.attrs['timestamp'] = time_stamp
         g.create_dataset('metadata_json', data=json_vars_dump)
 
-    return
+    return vs
 
 @graph()
 def simulate_diffraction():
@@ -712,14 +760,12 @@ def simulate_diffraction():
     data, data_2d, data_peak_pos, qx_axis = simulate_diffraction_data(vs, phase_dict, euler_list_n)
 
     # Post-processing
-    data, data_k, data_px, labels, data_2d_px, labels_2d = post_processing(vs, data, data_2d, qx_axis, phase_dict)
+    data, data_k, data_px, labels, data_2d, data_2d_px, labels_2d = post_processing(vs, data, data_2d, qx_axis, phase_dict)
 
     # Save files
-    save_simulation(vs, data, data_k, data_px, labels, data_2d_px, labels_2d, data_peak_pos, phase_dict, qx_axis, json_vars_dump)
+    vs = save_simulation(vs, data, data_k, data_px, labels, data_2d, data_2d_px, labels_2d, data_peak_pos, phase_dict, qx_axis, json_vars_dump)
 
-    # from mongodb.pymongo_connect import connect_to_mongo_database
-    # # Send json database to mongodb
-    # db_collection = connect_to_mongo_database('models', f'{vs.id}')
-    # TODO: Pass in the jason input file here
-    # db_collection.insert_one(json_input)
+    # Send json database to mongodb
+    save_metadata_to_mongodb(vs)
+
     get_dagster_logger().info(f"Simulation {id} complete")

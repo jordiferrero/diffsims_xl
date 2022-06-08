@@ -3,7 +3,7 @@
 ---
 sim_params: !pspace
 
-  root_path: 'G:/My Drive/PhD/projects/external_measurements/ml_difsims'
+  root_path: 'C:\Users\Sauron\Documents\GitHub\strankslab\ml_difsims'
   simulation_orientations_chunk_size: 5000
   random_seed: 10
   save_relpath: 'data/simulations'

@@ -20,7 +20,7 @@ sim_params: !pspace
     # It will disturb the calibration value by % when cropping in the q space. In None, nothing happens.
     calibration_modify_percent: !pdim
       default: 0
-      range: [0, 8, 2]
+      values: [0, 5, 10]
 
   orientations_parameters:
     n_points: 30000

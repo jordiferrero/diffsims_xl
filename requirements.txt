@@ -19,3 +19,4 @@ pyopencl
 PyYAML
 paramspace
 tqdm
+pymatgen

@@ -52,6 +52,7 @@ sim_params: !pspace
     background_parameters:
       # Can be True (will iterate though all param space), False or 'random'-ly select a subset
       add_background_to_1d: 'random'
+      include_also_non_bkg_simulation: False
       a_vals: [0, 0.1, 1., 5. 10.]
       # If a_val == 0, no background is added
       tau_vals: [0.1, 0.5, 1.0, 1.5, 2.0, 2.5]

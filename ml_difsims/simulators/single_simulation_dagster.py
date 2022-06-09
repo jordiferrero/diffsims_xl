@@ -37,6 +37,7 @@ json_vars_example = json.dumps({
             },
             "noise_addition": {
                 "add_noise": 'random',
+                # Select from bool or 'random'
                 "include_also_non_noisy_simulation": False,
                 # If add noise, do you want to also have the non-noisy data?
                 "snrs": [0.9, 0.99],
@@ -45,6 +46,7 @@ json_vars_example = json.dumps({
             "background_parameters": {
                 "add_background_to_1d": 'random',
                 # Select from bool or 'random'
+                "include_also_non_bkg_simulation": False,
                 "a_vals": [0, 1., 5.],
                 # A: pre-exp factor, tau: decay time constant
                 "tau_vals": [0.5, 1.5],

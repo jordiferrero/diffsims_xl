@@ -54,7 +54,7 @@ json_vars = {
     "random_seed" : seed,
     "id": model_name,
     "neptune_run_url" : str(run.get_run_url()),
-    "save_model_relpath" : r'data/models',
+    "save_model_relpath" : r'data/cnn_models',
 }
 
 #%%
@@ -228,7 +228,7 @@ model.summary(print_fn=lambda x: run['source_code/model/model_summary'].log(x))
 model.summary()
 
 # Send json database to mongodb
-db_collection = connect_to_mongo_database('models', model_name)
+db_collection = connect_to_mongo_database('cnn_models', model_name)
 db_collection.insert_one(json_vars)
 
 #%% md

@@ -440,7 +440,7 @@ def post_processing_1d(vs, data, qx_axis, phase_dict):
     crop_in_px = vs.postprocessing_parameters.crop_in_px
     save_full_scan = vs.postprocessing_parameters.save_full_scan
     radial_integration_1d = vs.detector_geometry.radial_integration_1d
-    include_also_non_noisy_simulation = vs.data_augmentation_parameters.noise_addition.include_also_non_noisy_simulation
+    include_also_non_bkg_simulation = vs.data_augmentation_parameters.background_parameters.include_also_non_bkg_simulation
 
     if radial_integration_1d:
         # Sqrt signal (if wanted)
@@ -475,7 +475,7 @@ def post_processing_1d(vs, data, qx_axis, phase_dict):
                 data_norm_1dnav = np.reshape(data_norm, (nav_size, data_norm.shape[-1]))
                 bkg_data = add_background_to_signal_array(data_norm_1dnav, qx_axis, a, tau)
                 bkg_data = np.reshape(bkg_data, data_norm.shape)
-                if include_also_non_noisy_simulation:
+                if include_also_non_bkg_simulation:
                     data = da.hstack((data_norm, bkg_data))
                 else:
                     data = bkg_data

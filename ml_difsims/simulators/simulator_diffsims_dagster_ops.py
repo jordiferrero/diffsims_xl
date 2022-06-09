@@ -451,7 +451,10 @@ def post_processing_1d(vs, data, qx_axis, phase_dict):
         # Approximate background as a $A * exp ^ {(-tau \: q)}$ value.
         if add_background_to_1d is not False:
             # Normalise
-            dpmax = data.max(2).compute()
+            try:
+                dpmax = data.max(2).compute()
+            except AttributeError:
+                dpmax = data.max(2)
             data_norm = data / dpmax[:, :, np.newaxis]
             # Correct any nan value
             nan_mask = np.isnan(data_norm)
@@ -770,7 +773,6 @@ def simulate_diffraction():
 
     # Save files
     vs = save_simulation(vs, data, data_k, data_px, labels, data_2d, data_2d_px, labels_2d, data_peak_pos, phase_dict, qx_axis, json_vars_dump)
-
     # Send json database to mongodb
     save_metadata_to_mongodb(vs)
 

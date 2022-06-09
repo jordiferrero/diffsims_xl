@@ -7,14 +7,14 @@ json_vars_example = json.dumps({
         "structure_parameters": {
             "phase_files_location_from_root": "models/crystal_phases",
             "phase_files": ['p4mbm_scaled_mixed_halide.cif'], #, 'gratia_2h.cif', 'pbi2_2h.cif'],
-            "add_bkg_phase": True,
+            "add_bkg_phase": False,
             # Do you want to add a bkg/just noise phase at the end? If True, the final datasets will be phases + 1 shape.
             "scattering_params": 'lobato',
         },
         "calibration_parameters": {
             "calibration_value": [0.00588,],
             #  List of 1 value only for now
-            "calibration_modify_percent": 0,
+            "calibration_modify_percent": 5,
             # It will disturb the calibration value by % when cropping in the q space. In None, nothing happens.
         },
         "orientations_parameters": {
@@ -28,7 +28,7 @@ json_vars_example = json.dumps({
         },
         "data_augmentation_parameters": {
             "peak_removal": {
-                "remove_peaks_from_diffraction_library": False,
+                "remove_peaks_from_diffraction_library": True,
                 "n_intensity_peaks": 20,
                 # Finds n brightest peaks to remove from. n_intensity_peaks >= n_peaks_to_remove
                 "num_peaks_to_remove": 'random',
@@ -36,14 +36,14 @@ json_vars_example = json.dumps({
                 # If 'random' is passed, it will randomise this value between 0 and n_intensity_peaks.
             },
             "noise_addition": {
-                "add_noise": False,
+                "add_noise": 'random',
                 "include_also_non_noisy_simulation": False,
                 # If add noise, do you want to also have the non-noisy data?
                 "snrs": [0.9, 0.99],
                 "intensity_spikes": [0, 0.25, 0.50],
             },
             "background_parameters": {
-                "add_background_to_1d": False,
+                "add_background_to_1d": 'random',
                 # Select from bool or 'random'
                 "a_vals": [0, 1., 5.],
                 # A: pre-exp factor, tau: decay time constant
@@ -68,14 +68,14 @@ json_vars_example = json.dumps({
             "wavelength": 2.5079e-12,
             "detector_pix_size": 55e-6,
             "detector_type": "Medipix515x515Detector",
-            "radial_integration_1d": False,
+            "radial_integration_1d": True,
             "radial_integration_2d": False,
             "save_peak_position_library": False,
         },
         "postprocessing_parameters": {
             "crop_in_k": False,
-            "crop_in_px": False,
-            "save_full_scan": False,
+            "crop_in_px": True,
+            "save_full_scan": True,
             "cropping_start_k": 0.11,
             "cropping_stop_k": 1.30,
             "cropped_signal_k_points": 147,

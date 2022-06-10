@@ -4,12 +4,12 @@ import numpy as np
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dropout
 from sklearn.model_selection import train_test_split
-import os, glob
+import os
 import matplotlib.pyplot as plt
 import pandas as pd
 import random
 import h5py
-from mongodb.pymongo_connect import connect_to_mongo_database
+from ml_difsims.utils.external_connects import connect_to_mongo_database
 
 #%%
 tf.config.list_physical_devices()

@@ -6,7 +6,7 @@ import hyperspy.api as hs
 import pyxem as pxm
 import diffpy.structure
 from dagster import op, get_dagster_logger, Out, DynamicOut, DynamicOutput, graph, GraphOut, RetryPolicy
-from scp import SCPClient
+from scp import SCPClient, SCPException
 
 from ml_difsims.simulators.simulation_utils import *
 from ml_difsims.simulators.noise_utils import *
@@ -763,8 +763,10 @@ def save_simulation(vs, data, data_k, data_px, labels, data_2d, data_2d_px, labe
         with SCPClient(ssh.get_transport()) as scp:
             spc_folder = r"/rds/project/rds-hirYTW1FQIw/shared_space/jf631"
             spc_path = os.path.join(spc_folder, 'simulations', id_name)
-            scp.put(save_path, spc_path)
-
+            try:
+                scp.put(save_path, spc_path)
+            except SCPException:
+                print("Could not save though SSH/SCP")
     return vs
 
 @graph()

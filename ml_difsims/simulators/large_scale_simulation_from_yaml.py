@@ -29,7 +29,7 @@ for i, params in tqdm.tqdm(enumerate(pspace)):
 @static_partitioned_config(partition_keys=JSON_FILES)
 def json_md_config(partition_key: str):
     return {'ops': {'simulate_diffraction': {'ops': {'load_json_metadata_to_dict': {'config': {'json_string': partition_key}}}}},
-            #"execution": {"config": {"multiprocess": {"max_concurrent": 4,}}}
+            "execution": {"config": {"multiprocess": {"max_concurrent": 10,}}}
             }
 
 

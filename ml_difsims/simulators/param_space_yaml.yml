@@ -5,7 +5,7 @@ sim_params: !pspace
 
   root_path: 'C:/Users/Sauron/Documents/GitHub/strankslab/ml_difsims'
   # Make sure path dashes are "/" and not "\"
-  simulation_orientations_chunk_size: 5000
+  simulation_orientations_chunk_size: 10000
   random_seed: 10
   save_relpath: 'data/simulations'
 
@@ -24,7 +24,7 @@ sim_params: !pspace
       values: [0, 5, 10]
 
   orientations_parameters:
-    n_points: 30000
+    n_points: 100000
     use_orix_sampling: !pdim
       default: True
       values: [True, False]
@@ -86,7 +86,7 @@ sim_params: !pspace
     cropped_signal_k_points: 147
     cropping_start_px: 13
     cropping_stop_px: 160
-    sqrt_signal: !pdim
-      default: False
-      values: [True, False]
+    sqrt_signal: False
+#      default: False
+#      values: [True, False]
     save_md_to_mongodb: True

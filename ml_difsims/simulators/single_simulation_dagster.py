@@ -85,7 +85,7 @@ json_vars_example = json.dumps({
             "cropping_start_px": 13,
             "cropping_stop_px": 160,
             "sqrt_signal": True,
-            "save_md_to_mongodb": False,
+            "save_md_to_mongodb": True,
         },
         "random_seed": 10,
         "save_relpath": 'data/simulations',

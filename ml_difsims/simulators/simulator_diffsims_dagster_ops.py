@@ -644,8 +644,7 @@ def save_metadata_to_mongodb(vs):
     id = vs.id
     if save_md_to_mongodb:
         db_collection = connect_to_mongo_database('simulations', f'{id}')
-        # Pass in the jason input file here
-        print(vs)
+        # Pass in the json input file here
         db_collection.insert_one(json.loads(json.dumps(vs, default=lambda o: o.__dict__)))
     return
 #%%
@@ -692,6 +691,9 @@ def save_simulation(vs, data, data_k, data_px, labels, data_2d, data_2d_px, labe
     n_phases = len(phase_dict)
     phase_names = [key for key in phase_dict.keys()]
     save_peak_position_library = vs.detector_geometry.save_peak_position_library
+    save_full_scan = vs.postprocessing_parameters.save_full_scan
+    crop_in_k = vs.postprocessing_parameters.crop_in_k
+    crop_in_px = vs.postprocessing_parameters.crop_in_px
 
     # Create a name string with summary
     calibration_str = f"{vs.calibration}".replace('.', 'p')
@@ -726,20 +728,25 @@ def save_simulation(vs, data, data_k, data_px, labels, data_2d, data_2d_px, labe
     with h5py.File(save_path, 'w') as f:
         if radial_integration_1d:
             g = f.create_group('1d')
-            g.create_dataset('x_all', data=data)
-            g.create_dataset('y_all', data=labels)
-            g.create_dataset('x_q', data=data_k)
-            g.create_dataset('y_q', data=labels)
-            g.create_dataset('x_px', data=data_px)
-            g.create_dataset('y_px', data=labels)
+            if save_full_scan:
+                g.create_dataset('x_all', data=data)
+                g.create_dataset('y_all', data=labels)
+            if crop_in_k:
+                g.create_dataset('x_q', data=data_k)
+                g.create_dataset('y_q', data=labels)
+            if crop_in_px:
+                g.create_dataset('x_px', data=data_px)
+                g.create_dataset('y_px', data=labels)
             g.create_dataset('x_all_q_axis', data=qx_axis)
 
         if radial_integration_2d:
             g = f.create_group('2d')
-            g.create_dataset('x_all', data=data_2d)
-            g.create_dataset('y_all', data=labels_2d)
-            g.create_dataset('x_px', data=data_2d_px)
-            g.create_dataset('y_px', data=labels_2d)
+            if save_full_scan:
+                g.create_dataset('x_all', data=data_2d)
+                g.create_dataset('y_all', data=labels_2d)
+            if crop_in_px:
+                g.create_dataset('x_px', data=data_2d_px)
+                g.create_dataset('y_px', data=labels_2d)
 
         if save_peak_position_library:
             g = f.create_group('peaks_positions')

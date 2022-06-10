@@ -41,15 +41,21 @@ def add_background_to_signal_array(normalised_sim_data_array, x_axis,
     """
 
     def inv_q(x, A, tau):
-        return A[:, np.newaxis] * x ** (-tau[:, np.newaxis])
+        return A * x ** (-tau)
 
     def exp_decay(x, A, tau):
-        return A[:, np.newaxis] * np.exp(- tau[:, np.newaxis] * x)
+        return A * np.exp(- tau * x)
+
+    # Do array broadcasting to calculate function
+    a_val = np.array(a_val[:, np.newaxis], dtype=float)
+    tau_val = np.array(tau_val[:, np.newaxis], dtype=float)
 
     if bkg_function == 'exp_decay':
         bkg = exp_decay(x_axis, a_val, tau_val)
     elif bkg_function == 'inv_q':
         bkg = inv_q(x_axis, a_val, tau_val)
+    else:
+        raise NotImplementedError("Only 'exp_decay' or 'inv_q' can be used.")
 
     if dimensions == 1:
         return normalised_sim_data_array + bkg

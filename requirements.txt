@@ -20,3 +20,5 @@ PyYAML
 paramspace
 tqdm
 pymatgen
+paramiko
+scp

@@ -1,18 +1,10 @@
 # Packages
 
 import numpy as np
-import pandas as pd
 import hyperspy.api as hs
 import pyxem as pxm
 import diffpy.structure
-from matplotlib import pyplot as plt
-from tempfile import TemporaryFile
-from diffsims.libraries.structure_library import StructureLibrary
-from diffsims.generators.diffraction_generator import DiffractionGenerator
-from diffsims.generators.library_generator import DiffractionLibraryGenerator, VectorLibraryGenerator
 
-import tqdm
-import gc
 import os
 import random
 
@@ -601,7 +593,7 @@ with h5py.File(save_path, 'w') as f:
     g.attrs['summary'] = full_name
     g.create_dataset('metadata_json', data=json_vars_dump)
 
-from mongodb.pymongo_connect import connect_to_mongo_database
+from ml_difsims.utils.external_connects import connect_to_mongo_database
 
 # Send json database to mongodb
 db_collection = connect_to_mongo_database('models', f'sim-{unique_id}')

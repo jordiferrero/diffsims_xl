@@ -1,14 +1,13 @@
 # Packages
 import math
 from datetime import datetime
-import numpy as np
 import dask.array as da
 import hyperspy.api as hs
 import pyxem as pxm
-from diffsims.utils.sim_utils import get_electron_wavelength
-from pyFAI.azimuthalIntegrator import AzimuthalIntegrator
 import diffpy.structure
-from dagster import job, op, get_dagster_logger, Out, In, DynamicOut, DynamicOutput, graph, GraphOut, RetryPolicy
+from dagster import op, get_dagster_logger, Out, DynamicOut, DynamicOutput, graph, GraphOut, RetryPolicy
+from scp import SCPClient
+
 from ml_difsims.simulators.simulation_utils import *
 from ml_difsims.simulators.noise_utils import *
 from ml_difsims.utils.postprocessing_utils import *
@@ -18,9 +17,8 @@ from types import SimpleNamespace
 import os
 import random
 import uuid
-import requests
 
-from mongodb.pymongo_connect import connect_to_mongo_database
+from ml_difsims.utils.external_connects import connect_to_mongo_database, start_shh_connection
 
 default_policy = RetryPolicy(max_retries=3)
 
@@ -647,6 +645,7 @@ def save_metadata_to_mongodb(vs):
         # Pass in the json input file here
         db_collection.insert_one(json.loads(json.dumps(vs, default=lambda o: o.__dict__)))
     return
+
 #%%
 # Overall operations
 @graph(out={"data": GraphOut(), "data_2d": GraphOut(), "data_peak_pos": GraphOut(), "qx_axis": GraphOut(),})
@@ -758,6 +757,13 @@ def save_simulation(vs, data, data_k, data_px, labels, data_2d, data_2d_px, labe
         g.attrs['id'] = f"{vs.id}"
         g.attrs['timestamp'] = time_stamp
         g.create_dataset('metadata_json', data=json_vars_dump)
+
+        # Save in external drive
+        ssh = start_shh_connection()
+        with SCPClient(ssh.get_transport()) as scp:
+            spc_folder = r"/rds/project/rds-hirYTW1FQIw/shared_space/jf631"
+            spc_path = os.path.join(spc_folder, 'simulations', id_name)
+            scp.put(save_path, spc_path)
 
     return vs
 

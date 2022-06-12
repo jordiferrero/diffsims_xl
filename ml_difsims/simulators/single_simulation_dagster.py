@@ -3,7 +3,7 @@ from ml_difsims.simulators.simulator_diffsims_dagster_ops import *
 import json
 
 json_vars_example = json.dumps({
-        "root_path": 'G:\My Drive\PhD\projects\external_measurements\ml_difsims',
+        "root_path": r'C:/Users/Sauron/Documents/GitHub/strankslab/ml_difsims',
         "structure_parameters": {
             "phase_files_location_from_root": "models/crystal_phases",
             "phase_files": ['p4mbm_scaled_mixed_halide.cif'], #, 'gratia_2h.cif', 'pbi2_2h.cif'],

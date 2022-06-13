@@ -6,15 +6,15 @@
 import os, glob
 import hyperspy.api as hs
 import numpy as np
+from diffsims.utils.sim_utils import get_electron_wavelength
 from pymatgen.analysis.diffraction.xrd import XRDCalculator
 from pymatgen.core import Structure
 import matplotlib.pyplot as plt
 
-
 #%%
 # Operations
 
-def get_diffraction_1d(link_to_cif, wavelength, plot=False):
+def get_diffraction_1d(link_to_cif, wavelength = 0.61992, plot=False):
     # Wavelength in amstrongs
     xrd_calculator = XRDCalculator(wavelength=wavelength)
     cif_file = Structure.from_file(link_to_cif)
@@ -102,32 +102,73 @@ def evaluate_peak_position_similarity(experimental_peaks, simulated_peaks_dict):
     return np.sum(total_metric)
 
 #%%
-def evaluate_data(s_experimental, s_predicted):
-    # Takes both the raw experimental hyperspy file and the predicted hyperspy file
-    wavelength = 0.61992 # Amstrong
-    phase_labels = None #  Load from prediction file md
-    q_axis = None # Load from prediction file md
+def load_prediction_and_data_files(path_to_prediction_file, folder_with_exp_data, root):
 
-    root = r"G:\My Drive\PhD\projects\external_measurements\ml_difsims"
-    cif_files_folder = r"\models\crystal_phases"
-    cif_files = [os.path.join(root, cif_files_folder, f"{phase}.cif") for phase in phase_labels]
+    pred_dat = np.load(path_to_prediction_file)['pred']
+    phase_labels = np.load(path_to_prediction_file)['phase_list']
 
-    sim_dif_dict = get_sim_diffraction_1d_dict(cif_files, phase_labels, wavelength)
-    peaks = get_peaks(get_mean_diffraction_per_labelled_prediction(s_experimental, s_predicted, phase_labels, q_axis))
+    # Find the exp file that matches the prediction name file
+    exp_files_paths = glob.glob(os.path.join(root, folder_with_exp_data, '*npz'))
+    general_name = os.path.basename(path_to_prediction_file).split('probab')[0]
+
+    exp_file_path = [f for f in exp_files_paths if general_name in f][0]
+    q_axis = np.load(exp_file_path)['x']
+    exp_dat = np.load(exp_file_path)['y']
+
+    return pred_dat, exp_dat, phase_labels, q_axis
+
+
+def evaluate_data(f_pred, data_folder, cif_files_folder, root_path):
+    """
+    Takes both the raw experimental diffraction file and the predictions probability file.
+    """
+
+    # Load data
+    pred_dat, exp_dat, phase_labels, q_axis = load_prediction_and_data_files(f_pred, data_folder, root_path)
+
+    cif_files = [os.path.join(root_path, cif_files_folder, f"{phase}.cif") for phase in phase_labels]
+
+    sim_dif_dict = get_sim_diffraction_1d_dict(cif_files, phase_labels,)
+
+    # TODO: see below
+    # Select which method to use (to convert to one-hot notation)
+    # make sure it is a hyperspy object when needed
+    mean_dp_per_label = get_mean_diffraction_per_labelled_prediction(exp_dat, pred_dat, phase_labels, q_axis)
+    peaks = get_peaks(mean_dp_per_label)
 
     metric = evaluate_peak_position_similarity(peaks, sim_dif_dict)
     return metric
 
 #%%
 
-def evaluate_all():
-    experimental_f_paths = [r"G:\My Drive\PhD\projects\external_measurements\ml_difsims\data\experimental\20220126_142402_rebin_nav_2_radial.hspy",]
-    for f in experimental_f_paths:
-        s_experimental = hs.load(f)
-        f_predicted = f"{os.path.basename(f).split('.')[0]}_pred.hspy"
-        s_predicted = hs.load(f_predicted)
+root = r'G:\My Drive\PhD\projects\external_measurements\ml_difsims'
 
-        evaluate_data(s_experimental, s_predicted)
+pred_folder = r'data\predictions\test'
+data_folder = r'data\experimental\npz_files'
+cif_files_folder = r'models\crystal_phases'
+prediction_list_to_evaluate = glob.glob(os.path.join(root, pred_folder, '*_probability_pred.npz'))
+prediction_list_to_evaluate.sort()
+
+prediction_list_to_evaluate
+
+#%%
+
+def evaluate_all(prediction_list_to_evaluate, data_folder, cif_files_folder, root_path):
+    """
+    Input files needed:
+    - `*_probabilty_pred.npz` numpy array containing the predictions for each experimental file as a shape of (y, x, prob_n_phases) saved as 'pred' key AND the predicted labels as 'phase_list' key.
+    - Link to the original `*_radial_crop.npz` files containing the 1D cropped diffraction patterns and the original q_axis range.
+    - Link to the `.cif` files to use to simulate diffraction patterns from
+    """
+
+    evaluations = {}
+    # Loop through all the files
+    for f_pred in prediction_list_to_evaluate:
+        evaluation = evaluate_data(f_pred, data_folder, cif_files_folder, root_path)
+        evaluations[f_pred] = evaluation
+
+    return evaluations
 
 
-evaluate_all()
+if __name__ == "__main__":
+    result = evaluate_all.execute_in_process()

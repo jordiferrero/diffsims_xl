@@ -1,5 +1,7 @@
 # Import packages
 import os, glob
+from datetime import datetime
+
 import hyperspy.api as hs
 import numpy as np
 from pymatgen.analysis.diffraction.xrd import XRDCalculator
@@ -8,6 +10,8 @@ import matplotlib.pyplot as plt
 
 #%%
 # Operations
+from ml_difsims.utils.external_connects import connect_to_mongo_database
+
 
 def get_diffraction_1d(link_to_cif, wavelength = 0.61992, plot=False):
     # Wavelength in amstrongs
@@ -128,6 +132,10 @@ def load_prediction_and_data_files(path_to_prediction_file, folder_with_exp_data
 
     pred_dat = np.load(path_to_prediction_file)['pred']
     phase_labels = np.load(path_to_prediction_file)['phases']
+    try:
+        cnn_id = np.load(path_to_prediction_file)['cnn_id']
+    except KeyError:
+        cnn_id = None
 
     # Find the exp file that matches the prediction name file
     exp_files_paths = glob.glob(os.path.join(root, folder_with_exp_data, '*.npz'))
@@ -137,7 +145,7 @@ def load_prediction_and_data_files(path_to_prediction_file, folder_with_exp_data
     q_axis = np.load(exp_file_path)['x']
     exp_dat = np.load(exp_file_path)['y']
 
-    return pred_dat, exp_dat, phase_labels, q_axis
+    return pred_dat, exp_dat, phase_labels, q_axis, cnn_id
 
 
 def convert_dat_to_mask(pred_dat, masking_method):
@@ -165,6 +173,23 @@ def log_metrics(metric_per_phase, mean_metric, phase_labels, f_pred):
     print(f"Mean error -- {mean_metric}")
     return
 
+def save_metadata_to_mongodb(metric_per_phase, mean_metric, phase_labels, f_pred, cnn_id):
+    db_collection = connect_to_mongo_database('pred_evaluation', f'{cnn_id}')
+    md = {}
+    md['pred_evaluation_id'] = f'{cnn_id}'
+    md['predicted_exp_file'] = str(os.path.basename(f_pred))
+    md['evaluation_method'] = "peak_x_pos_difference"
+
+    md["metric_per_phase"] = {}
+    for i, phase in enumerate(phase_labels):
+        md["metric_per_phase"][phase] = metric_per_phase[i]
+    md["metric_mean"] = mean_metric
+    time_stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    md["timestamp"] = time_stamp
+
+    db_collection.insert_one(md)
+    return
+
 
 def evaluate_data(f_pred, data_folder, cif_files_folder, root_path):
     """
@@ -172,7 +197,7 @@ def evaluate_data(f_pred, data_folder, cif_files_folder, root_path):
     """
 
     # Load data
-    pred_dat, exp_dat, phase_labels, q_axis = load_prediction_and_data_files(f_pred, data_folder, root_path)
+    pred_dat, exp_dat, phase_labels, q_axis, cnn_id = load_prediction_and_data_files(f_pred, data_folder, root_path)
 
     cif_files = [os.path.join(root_path, cif_files_folder, f"{phase}.cif") for phase in phase_labels]
 
@@ -185,5 +210,6 @@ def evaluate_data(f_pred, data_folder, cif_files_folder, root_path):
 
     metric_per_phase, mean_metric = evaluate_peak_position_similarity(peaks, sim_dif_dict)
     log_metrics(metric_per_phase, mean_metric, phase_labels, f_pred)
+    save_metadata_to_mongodb(metric_per_phase, mean_metric, phase_labels, f_pred, cnn_id)
     return mean_metric
 

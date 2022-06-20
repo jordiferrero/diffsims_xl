@@ -6,7 +6,9 @@ sim_params: !pspace
   root_path: 'C:/Users/Sauron/Documents/GitHub/strankslab/ml_difsims'
   # Make sure path dashes are "/" and not "\"
   simulation_orientations_chunk_size: 10000
-  random_seed: 10
+  random_seed: !pdim
+    default: 10
+    values: [0, 5, 10, 15, 20, 25]
   save_relpath: 'data/simulations'
 
   structure_parameters:
@@ -19,15 +21,15 @@ sim_params: !pspace
     # if more than 1 value is passed, it will take the mean.
     calibration_value: [0.00588]
     # It will disturb the calibration value by % when cropping in the q space. In None, nothing happens.
-    calibration_modify_percent: !pdim
-      default: 0
-      values: [0, 5, 10]
+    calibration_modify_percent: 5
+#      default: 0
+#      values: [0, 5, 10]
 
   orientations_parameters:
     n_points: 100000
-    use_orix_sampling: !pdim
-      default: True
-      values: [True, False]
+    use_orix_sampling: True
+#      default: True
+#      values: [True, False]
     ori_files_location_from_root: 'models/orix_orientation_full_lists'
     orientation_files_list: ['orientations_pg422_3_xxxx.npy', 'orientations_pg622_3_xxxx.npy', 'orientations_pg32_3_xxxx.npy']
     orientation_sampling_mode: ['cubo', 'euler', 'quat']
@@ -42,7 +44,7 @@ sim_params: !pspace
       num_peaks_to_remove: 'random'
 
     noise_addition:
-      add_noise: 'random'
+      add_noise: False
       # Can be True (will iterate though all param space), False or 'random'-ly select a subset
       include_also_non_noisy_simulation: False
       snrs: [0.9, 0.99, 0.999, 0.9999]
@@ -52,7 +54,7 @@ sim_params: !pspace
 
     background_parameters:
       # Can be True (will iterate though all param space), False or 'random'-ly select a subset
-      add_background_to_1d: 'random'
+      add_background_to_1d: False
       include_also_non_bkg_simulation: False
       a_vals: [0, 0.1, 1., 5., 10.]
       # If a_val == 0, no background is added

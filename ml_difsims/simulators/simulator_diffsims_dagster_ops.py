@@ -127,6 +127,7 @@ def set_detector_on_dp_object(vs, dp):
     #     detector_type = vs.detector_geometry.detector_type
     #     detector = getattr(pxm.detectors, detector_type)
     #     return detector
+    # from diffsims.utils.sim_utils import get_electron_wavelength
     # wavelength = get_electron_wavelength(beam_energy)
     # detector_pix_size = vs.detector_geometry.detector_pix_size
     # detector = get_diffsims_detector_object(vs)

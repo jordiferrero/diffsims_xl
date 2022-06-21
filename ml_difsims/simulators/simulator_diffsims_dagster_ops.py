@@ -641,8 +641,9 @@ def post_processing_2d(vs, data_2d, qx_axis, phase_dict):
 def save_metadata_to_mongodb(vs):
     save_md_to_mongodb = vs.postprocessing_parameters.save_md_to_mongodb
     id = vs.id
+    setattr(vs, '_id', id)
     if save_md_to_mongodb:
-        db_collection = connect_to_mongo_database('simulations', f'{id}')
+        db_collection = connect_to_mongo_database('simulations_db', 'sim')
         # Pass in the json input file here
         db_collection.insert_one(json.loads(json.dumps(vs, default=lambda o: o.__dict__)))
     return

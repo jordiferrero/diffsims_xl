@@ -5,7 +5,7 @@ sim_params: !pspace
 
   root_path: 'C:/Users/Sauron/Documents/GitHub/strankslab/ml_difsims'
   # Make sure path dashes are "/" and not "\"
-  simulation_orientations_chunk_size: 10000
+  simulation_orientations_chunk_size: 1000
   random_seed: !pdim
     default: 10
     values: [0, 5, 10, 15, 20, 25]
@@ -26,7 +26,7 @@ sim_params: !pspace
 #      values: [0, 5, 10]
 
   orientations_parameters:
-    n_points: 100000
+    n_points: 10000
     use_orix_sampling: True
 #      default: True
 #      values: [True, False]
@@ -76,8 +76,8 @@ sim_params: !pspace
     detector_pix_size: 55e-6
     detector_type: 'Medipix515x515Detector'
     radial_integration_1d: True
-    radial_integration_2d: False
-    save_peak_position_library: False
+    radial_integration_2d: True
+    save_peak_position_library: True
 
   postprocessing_parameters:
     crop_in_k: False

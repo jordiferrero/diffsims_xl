@@ -3,11 +3,11 @@ from ml_difsims.simulators.simulator_diffsims_dagster_ops import *
 import json
 
 json_vars_example = json.dumps({
-        "root_path": r'C:/Users/Sauron/Documents/GitHub/strankslab/ml_difsims',
+        "root_path": r"G:\My Drive\PhD\projects\external_measurements\ml_difsims",
         "structure_parameters": {
             "phase_files_location_from_root": "models/crystal_phases",
-            "phase_files": ['p4mbm_scaled_mixed_halide.cif'], #, 'gratia_2h.cif', 'pbi2_2h.cif'],
-            "add_bkg_phase": False,
+            "phase_files": ['p4mbm_scaled_mixed_halide.cif',],# 'gratia_2h.cif', 'pbi2_2h.cif'],
+            "add_bkg_phase": True,
             # Do you want to add a bkg/just noise phase at the end? If True, the final datasets will be phases + 1 shape.
             "scattering_params": 'lobato',
         },
@@ -36,7 +36,7 @@ json_vars_example = json.dumps({
                 # If 'random' is passed, it will randomise this value between 0 and n_intensity_peaks.
             },
             "noise_addition": {
-                "add_noise": 'random',
+                "add_noise": False,
                 # Select from bool or 'random'
                 "include_also_non_noisy_simulation": False,
                 # If add noise, do you want to also have the non-noisy data?
@@ -44,7 +44,7 @@ json_vars_example = json.dumps({
                 "intensity_spikes": [0, 0.25, 0.50],
             },
             "background_parameters": {
-                "add_background_to_1d": 'random',
+                "add_background_to_1d": False,
                 # Select from bool or 'random'
                 "include_also_non_bkg_simulation": False,
                 "a_vals": [0, 1., 5.],
@@ -85,7 +85,7 @@ json_vars_example = json.dumps({
             "cropping_start_px": 13,
             "cropping_stop_px": 160,
             "sqrt_signal": True,
-            "save_md_to_mongodb": True,
+            "save_md_to_mongodb": False,
         },
         "random_seed": 10,
         "save_relpath": 'data/simulations',

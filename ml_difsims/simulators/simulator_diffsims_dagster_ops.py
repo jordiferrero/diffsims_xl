@@ -808,7 +808,7 @@ def save_simulation(vs, data, data_k, data_px, labels, data_2d, data_2d_px, labe
     setattr(vs, 'timestamp', time_stamp)
 
     # Create folder
-    save_folder_path = os.path.join(vs.root_path, vs.save_relpath,)
+    save_folder_path = os.path.abspath(vs.save_abspath)
     if not os.path.exists(save_folder_path):
         os.makedirs(save_folder_path)
 

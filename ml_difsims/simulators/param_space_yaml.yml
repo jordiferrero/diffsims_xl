@@ -10,7 +10,7 @@ sim_params: !pspace
   random_seed: !pdim
     default: 10
     values: [0, 5, 10, 15, 20, 25]
-  save_relpath: 'data/simulations/2d_noise_bkg'
+  save_abspath: 'D:/Data/jf631/simulations_diffsims_ml/simulations/2d_noise_bkgdata/simulations/2d_noise_bkg'
 
   structure_parameters:
     phase_files_location_from_root: 'models/crystal_phases'

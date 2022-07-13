@@ -162,7 +162,7 @@ def get_simulation_library(vs, i_relrod, key, phase, euler):
     else:
         relrod_length = relrod_list[i_relrod]
 
-    if calibration_modify_percent != 0:
+    if calibration_modify_percent != (None or 0):
         modify_percent = np.random.uniform(low=-calibration_modify_percent, high=calibration_modify_percent)
 
         calibration = calibration * (1 + modify_percent / 100)
@@ -571,6 +571,7 @@ def post_processing_2d(vs, data_2d, qx_axis, phase_dict):
     cropping_start_px = vs.postprocessing_parameters.cropping_start_px
     cropping_stop_px = vs.postprocessing_parameters.cropping_stop_px
     radial_integration_2d = vs.detector_geometry.radial_integration_2d
+    crop_in_k = vs.postprocessing_parameters.crop_in_k
     crop_in_px = vs.postprocessing_parameters.crop_in_px
     save_full_scan = vs.postprocessing_parameters.save_full_scan
 
@@ -581,34 +582,53 @@ def post_processing_2d(vs, data_2d, qx_axis, phase_dict):
 
         # Add simulated background
         # TODO: Add 2d background simulation
+        # TODO: Add crop in k space
+        if crop_in_k:
+            raise NotImplementedError("Crop in k units in 2D is not implemented.")
+            # ## Crop, rebin and normalise on pixel coords
+            # # # Crop in pixel units:
+            # if calibration_modify_percent == (None or 0):
+            #     raise NotImplementedError("Crop in k units in 2D is not implemented.")
+            # else:
+            #     # Calculate how many pixels the calibration tolerance factor corresponds to
+            #     detector_size = vs.detector_geometry.detector_size
+            #     radial_steps = int(np.ceil((int(detector_size / 2) - 1) / 2) * 2)
+            #     one_px_q = qx_axis.max() / radial_steps
+            #     max_q_range = calibration_modify_percent / 100 * qx_axis.max()
+            #     max_px_shift = max_q_range / one_px_q
+            #     range_percents_modification = np.arange(-max_px_shift, max_px_shift + 1, 1)
+            #
+            #     signals_temp_2d = da.array([])
+            #     for phase_2d in data_2d:
+            #         for ori_2d in phase_2d:
+            #
+            #             px_shift = random.choice(range_percents_modification) / 100
+            #             temp = ori_2d[np.ceil(cropping_start_px + px_shift): np.ceil(cropping_stop_px + px_shift), :]
+            #             try:
+            #                 signals_temp_2d = da.vstack((signals_temp_2d, temp))
+            #             except ValueError:
+            #                 signals_temp_2d = da.array(temp)
+            #
+            #     # Reshape back
+            #     shape_ori = list(data_2d.shape)
+            #     shape_ori[-2] = cropped_signal_k_points
+            #     data_2d_px = da.reshape(signals_temp_2d, shape_ori)
+            #
+            # # Renormalise
+            # dpmax = data_2d_px.max([-2, -1])
+            # data_2d_px = data_2d_px / dpmax[:, :, np.newaxis, np.newaxis]
+            # # Correct any nan value
+            # nan_mask = np.isnan(data_2d_px)
+            # data_2d_px[nan_mask] = 0
+            #
+            # # NN Requirements: Reshape and Labelling
+            # data_2d_px = data_2d_px.reshape(-1, data_2d_px.shape[-2], data_2d_px.shape[-1])
+        else:
+            data_2d_k = None
+
         if crop_in_px:
             ## Crop, rebin and normalise on pixel coords
-            # # Crop in pixel units:
-            if calibration_modify_percent == (None or 0):
-                data_2d_px = data_2d[:, :, cropping_start_px: cropping_stop_px, :]
-            else:
-                # Calculate how many pixels the calibration tolerance factor corresponds to
-                detector_size = vs.detector_geometry.detector_size
-                radial_steps = int(np.ceil((int(detector_size / 2) - 1) / 2) * 2)
-                one_px_q = qx_axis.max() / radial_steps
-                max_q_range = calibration_modify_percent / 100 * qx_axis.max()
-                max_px_shift = max_q_range / one_px_q
-                range_percents_modification = np.arange(-max_px_shift, max_px_shift + 1, 1)
-
-                signals_temp_2d = da.array([])
-                for phase_2d in data_2d:
-                    for ori_2d in phase_2d:
-                        px_shift = random.choice(range_percents_modification) / 100
-                        temp = ori_2d[np.ceil(cropping_start_px + px_shift): np.ceil(cropping_stop_px + px_shift), :]
-                        try:
-                            signals_temp_2d = da.vstack((signals_temp_2d, temp))
-                        except ValueError:
-                            signals_temp_2d = da.array(temp)
-
-                # Reshape back
-                shape_ori = list(data_2d.shape)
-                shape_ori[-2] = cropped_signal_k_points
-                data_2d_px = da.reshape(signals_temp_2d, shape_ori)
+            data_2d_px = data_2d[:, :, cropping_start_px: cropping_stop_px, :]
 
             # Renormalise
             dpmax = data_2d_px.max([-2, -1])
@@ -621,6 +641,9 @@ def post_processing_2d(vs, data_2d, qx_axis, phase_dict):
             data_2d_px = data_2d_px.reshape(-1, data_2d_px.shape[-2], data_2d_px.shape[-1])
         else:
             data_2d_px = None
+
+        # NN Requirements: Reshape and Labelling
+        data_2d = data_2d.reshape(-1, data_2d.shape[-2], data_2d.shape[-1])
 
         # Create labels for 2D
         n_phases = len(phase_dict)

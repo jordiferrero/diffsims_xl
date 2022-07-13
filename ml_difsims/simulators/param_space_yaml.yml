@@ -5,12 +5,12 @@ sim_params: !pspace
 
   root_path: 'C:/Users/Sauron/Documents/GitHub/strankslab/ml_difsims'
   # Make sure path dashes are "/" and not "\"
-  simulation_orientations_chunk_size: 5
-  random_seed: 10
-#  random_seed: !pdim
-#    default: 10
-#    values: [0, 5, 10, 15, 20, 25]
-  save_relpath: 'data/simulations'
+  simulation_orientations_chunk_size: 2500
+#  random_seed: 10
+  random_seed: !pdim
+    default: 10
+    values: [0, 5, 10, 15, 20, 25]
+  save_relpath: 'data/simulations/2d_noise_bkg'
 
   structure_parameters:
     phase_files_location_from_root: 'models/crystal_phases'
@@ -27,7 +27,7 @@ sim_params: !pspace
 #      values: [0, 5, 10]
 
   orientations_parameters:
-    n_points: 10
+    n_points: 25000
     use_orix_sampling: True
 #      default: True
 #      values: [True, False]
@@ -50,14 +50,14 @@ sim_params: !pspace
       include_also_non_noisy_simulation: False
       snrs: [0.9, 0.99, 0.999, 0.9999]
       # Probability of salt-pepper noise
-      intensity_spikes: [0, 0.1, 0.25, 0.50, 0.75]
+      intensity_spikes: [0, 0, 0, 0, 0.1, 0.25, 0.50, 0.75]
       # If intensity_spikes == 0, no noise is added
 
     background_parameters:
       # Can be True (will iterate though all param space), False or 'random'-ly select a subset
       add_background_to_simulation: 'random'
       include_also_non_bkg_simulation: False
-      a_vals: [0, 0.1, 1., 5., 10.]
+      a_vals: [0, 0, 0, 0, 0.1, 1., 5., 10.]
       # If a_val == 0, no background is added
       tau_vals: [0.1, 0.5, 1.0, 1.5, 2.0, 2.5]
 

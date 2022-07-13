@@ -60,7 +60,7 @@ def add_background_to_signal_array(normalised_sim_data_array, x_axis,
     if dimensions == 1:
         return normalised_sim_data_array + bkg
     elif dimensions == 2:
-        # n = normalised_sim_data_array.shape[-1]
-        # bkg = np.tile(bkg, (n, 1)).T
-        # TODO: Inplement add bkg to 2D signals
-        return normalised_sim_data_array + bkg
+        dat_shape = normalised_sim_data_array.shape[-2:]
+        n_angles = dat_shape[-1]
+        bkg_2d = np.repeat(bkg[:, :, np.newaxis], n_angles, axis=-1)
+        return normalised_sim_data_array + bkg_2d

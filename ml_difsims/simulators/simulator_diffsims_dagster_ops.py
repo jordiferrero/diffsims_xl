@@ -428,7 +428,7 @@ def crop_and_rebin_individually_1d(vs, range, dp):
 @op(out={"data": Out(), "data_k": Out(), "data_px": Out(), "labels": Out()})
 def post_processing_1d(vs, data, qx_axis, phase_dict):
     sqrt_signal = vs.postprocessing_parameters.sqrt_signal
-    add_background_to_1d = vs.data_augmentation_parameters.background_parameters.add_background_to_1d
+    add_background_to_simulation = vs.data_augmentation_parameters.background_parameters.add_background_to_simulation
     cropping_start_k = vs.postprocessing_parameters.cropping_start_k
     cropping_stop_k = vs.postprocessing_parameters.cropping_stop_k
     cropped_signal_k_points = vs.postprocessing_parameters.cropped_signal_k_points
@@ -448,7 +448,7 @@ def post_processing_1d(vs, data, qx_axis, phase_dict):
 
         # Add simulated background
         # Approximate background as a $A * exp ^ {(-tau \: q)}$ value.
-        if add_background_to_1d is not False:
+        if add_background_to_simulation is not False:
             # Normalise
             try:
                 dpmax = data.max(2).compute()
@@ -462,7 +462,7 @@ def post_processing_1d(vs, data, qx_axis, phase_dict):
             a_vals = vs.data_augmentation_parameters.background_parameters.a_vals
             tau_vals = vs.data_augmentation_parameters.background_parameters.tau_vals
             # Data amplification with a random subset of the param space
-            if add_background_to_1d == 'random':
+            if add_background_to_simulation == 'random':
                 nav_shape = data_norm.shape[:-1]
                 nav_size = math.prod(nav_shape)
 
@@ -489,9 +489,6 @@ def post_processing_1d(vs, data, qx_axis, phase_dict):
                             data = da.hstack((data, bkg_data))
 
         ## Crop, rebin and normalise on pixel coords
-        crop_in_k
-
-        save_full_scan
         # Crop in pixel units:
         if crop_in_px:
             data_px = data[:, :, cropping_start_px: cropping_stop_px]
@@ -574,14 +571,58 @@ def post_processing_2d(vs, data_2d, qx_axis, phase_dict):
     crop_in_k = vs.postprocessing_parameters.crop_in_k
     crop_in_px = vs.postprocessing_parameters.crop_in_px
     save_full_scan = vs.postprocessing_parameters.save_full_scan
+    add_background_to_simulation = vs.data_augmentation_parameters.background_parameters.add_background_to_simulation
+    include_also_non_bkg_simulation = vs.data_augmentation_parameters.background_parameters.include_also_non_bkg_simulation
+
 
     if radial_integration_2d:
         # Sqrt signal (if wanted)
         if sqrt_signal:
             data_2d = da.sqrt(data_2d)
 
-        # Add simulated background
-        # TODO: Add 2d background simulation
+        # Add 2d background simulation
+        # Approximate background as a $A * exp ^ {(-tau \: q)}$ value.
+        if add_background_to_simulation is not False:
+            # Normalise
+            try:
+                dpmax = data_2d.max([-2, -1]).compute()
+            except AttributeError:
+                dpmax = data_2d.max([-2, -1])
+
+            data_2d_norm = data_2d / dpmax[:, :, np.newaxis, np.newaxis]
+            # Correct any nan value
+            nan_mask = np.isnan(data_2d_norm)
+            data_2d_norm[nan_mask] = 0
+
+            a_vals = vs.data_augmentation_parameters.background_parameters.a_vals
+            tau_vals = vs.data_augmentation_parameters.background_parameters.tau_vals
+            # Data amplification with a random subset of the param space
+            if add_background_to_simulation == 'random':
+                nav_shape = data_2d_norm.shape[:-2]
+                nav_size = math.prod(nav_shape)
+
+                tau = random.choices(tau_vals, k=nav_size)
+                a = random.choices(a_vals, k=nav_size)
+                tau = np.reshape(tau, nav_size)
+                a = np.reshape(a, nav_size)
+                # Flatten the navigation axis
+                data_norm_1dnav = np.reshape(data_2d_norm, (nav_size, data_2d_norm.shape[-2], data_2d_norm.shape[-1]))
+                bkg_data = add_background_to_signal_array(data_norm_1dnav, qx_axis, a, tau, dimensions=2)
+                bkg_data = np.reshape(bkg_data, data_2d_norm.shape)
+                if include_also_non_bkg_simulation:
+                    data_2d = da.hstack((data_2d_norm, bkg_data))
+                else:
+                    data_2d = bkg_data
+            else:
+                for i, a in enumerate(a_vals):
+                    for tau in tau_vals:
+                        a, tau = np.array([a]), np.array([tau])
+                        bkg_data = add_background_to_signal_array(data_2d_norm, qx_axis, a, tau, dimensions=2)
+                        if i == 0:
+                            data_2d = da.hstack((data_2d_norm, bkg_data))
+                        else:
+                            data_2d = da.hstack((data_2d, bkg_data))
+
         # TODO: Add crop in k space
         if crop_in_k:
             raise NotImplementedError("Crop in k units in 2D is not implemented.")

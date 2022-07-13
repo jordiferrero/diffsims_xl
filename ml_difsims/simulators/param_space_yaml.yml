@@ -25,6 +25,10 @@ sim_params: !pspace
     calibration_modify_percent: 5
 #      default: 0
 #      values: [0, 5, 10]
+    # A dictionary with the range of scaling factors for each phase:
+    scale_cif_files: True
+    scale_range_dict: { 'p4mbm_scaled_mixed_halide' : [0.8, 1.1],
+                        'gratia_2h': [0.8, 1.1],}
 
   orientations_parameters:
     n_points: 25000

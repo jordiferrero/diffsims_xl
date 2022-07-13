@@ -143,6 +143,27 @@ def set_detector_on_dp_object(vs, dp):
     dp.set_ai(center=center)
     return dp, vs
 
+# Modify crystal files
+@op(out={"phase_mod": Out()})
+def scale_crystal_phase(phase, key, scale_range_dict,):
+
+    def scale_lattice(cif_file, scaling_factor):
+        import copy
+        cif = copy.deepcopy(cif_file)
+        cif.lattice.a *= scaling_factor
+        cif.lattice.b *= scaling_factor
+        cif.lattice.c *= scaling_factor
+        return cif
+
+    try:
+        scale_range = scale_range_dict[key]
+        modify_scale = np.random.uniform(*scale_range)
+        phase_mod = scale_lattice(phase, modify_scale)
+        return phase_mod
+
+    except KeyError:
+        return phase
+
 @op
 def get_simulation_library(vs, i_relrod, key, phase, euler):
     randomise_relrod = vs.relrod_parameters.randomise_relrod
@@ -156,11 +177,16 @@ def get_simulation_library(vs, i_relrod, key, phase, euler):
     n_intensity_peaks = vs.data_augmentation_parameters.peak_removal.n_intensity_peaks
     num_peaks_to_remove = vs.data_augmentation_parameters.peak_removal.num_peaks_to_remove
     calibration_modify_percent = vs.calibration_parameters.calibration_modify_percent
+    scale_cif_files = vs.calibration_parameters.scale_cif_files
+    scale_range_dict = vs.calibration_parameters.scale_range_dict
 
     if randomise_relrod:
         relrod_length = random.choice(relrod_list)
     else:
         relrod_length = relrod_list[i_relrod]
+
+    if scale_cif_files:
+        phase = scale_crystal_phase(phase, key, scale_range_dict)
 
     if calibration_modify_percent != (None or 0):
         modify_percent = np.random.uniform(low=-calibration_modify_percent, high=calibration_modify_percent)

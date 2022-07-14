@@ -1,2 +1,4 @@
 load_from:
-  - python_file: ml_difsims/simulators/large_scale_simulation_from_yaml.py
+#  - python_file: ml_difsims/simulators/large_scale_simulation_from_yaml.py
+#  - python_file: ml_difsims/pre_processing/new_file_sensor.py
+  - python_package: ml_difsims.pre_processing.new_file_sensor

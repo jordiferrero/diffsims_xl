@@ -111,7 +111,7 @@ def get_unique_id(vs):
 @op(out={"dp": Out(), "vs": Out()})
 def set_detector_on_dp_object(vs, dp):
 
-    beam_energy = vs.detector_geometry.beam_energy
+    beam_energy = vs.beam_energy
     unit = "k_A^-1"
     calibration = vs.calibration
     detector_size = dp.axes_manager.signal_axes[0].size
@@ -168,7 +168,7 @@ def scale_crystal_phase(phase, key, scale_range_dict,):
 def get_simulation_library(vs, i_relrod, key, phase, euler):
     randomise_relrod = vs.relrod_parameters.randomise_relrod
     relrod_list = vs.relrod_parameters.relrod_list
-    beam_energy = vs.detector_geometry.beam_energy
+    beam_energy = vs.beam_energy
     scattering_params = vs.structure_parameters.scattering_params
     calibration = vs.calibration
     detector_size = vs.detector_geometry.detector_size
@@ -477,10 +477,12 @@ def post_processing_1d(vs, data, qx_axis, phase_dict):
         if add_background_to_simulation is not False:
             # Normalise
             try:
-                dpmax = data.max(2).compute()
+                dpmax = data.max(2, keepdims=True).compute()
+                dpmin = data.min(2, keepdims=True).compute()
             except AttributeError:
-                dpmax = data.max(2)
-            data_norm = data / dpmax[:, :, np.newaxis]
+                dpmax = data.max(2, keepdims=True)
+                dpmin = data.min(2, keepdims=True)
+            data_norm = (data - dpmin) / (dpmax - dpmin)
             # Correct any nan value
             nan_mask = np.isnan(data_norm)
             data_norm[nan_mask] = 0
@@ -519,8 +521,10 @@ def post_processing_1d(vs, data, qx_axis, phase_dict):
         if crop_in_px:
             data_px = data[:, :, cropping_start_px: cropping_stop_px]
             # Renormalise
-            dpmax = data_px.max(-1)
-            data_px = data_px / dpmax[:, :, np.newaxis]
+            dpmax = data_px.max(-1, keepdims=True)
+            dpmin = data_px.min(-1, keepdims=True)
+            data_px = (data_px - dpmin) / (dpmax - dpmin)
+
             # Correct any nan value
             nan_mask = np.isnan(data_px)
             data_px[nan_mask] = 0
@@ -557,8 +561,10 @@ def post_processing_1d(vs, data, qx_axis, phase_dict):
 
             data_k = da.array(data_k)
             # Renormalise
-            dpmax = data_k.max(-1)
-            data_k = data_k / dpmax[:, :, np.newaxis]
+            dpmax = data_k.max(-1, keepdims=True)
+            dpmin = data_k.min(-1, keepdims=True)
+            data_k = (data_k - dpmin) / (dpmax - dpmin)
+
             # Correct any nan value
             nan_mask = np.isnan(data_k)
             data_k[nan_mask] = 0
@@ -611,11 +617,12 @@ def post_processing_2d(vs, data_2d, qx_axis, phase_dict):
         if add_background_to_simulation is not False:
             # Normalise
             try:
-                dpmax = data_2d.max([-2, -1]).compute()
+                dpmax = data_2d.max((-2,-1), keepdims=True).compute()
+                dpmin = data_2d.min((-2,-1), keepdims=True).compute()
             except AttributeError:
-                dpmax = data_2d.max([-2, -1])
-
-            data_2d_norm = data_2d / dpmax[:, :, np.newaxis, np.newaxis]
+                dpmax = data_2d.max((-2, -1), keepdims=True)
+                dpmin = data_2d.min((-2, -1), keepdims=True)
+            data_2d_norm = (data_2d - dpmin) / (dpmax - dpmin)
             # Correct any nan value
             nan_mask = np.isnan(data_2d_norm)
             data_2d_norm[nan_mask] = 0
@@ -698,8 +705,10 @@ def post_processing_2d(vs, data_2d, qx_axis, phase_dict):
             data_2d_px = data_2d[:, :, cropping_start_px: cropping_stop_px, :]
 
             # Renormalise
-            dpmax = data_2d_px.max([-2, -1])
-            data_2d_px = data_2d_px / dpmax[:, :, np.newaxis, np.newaxis]
+            dpmax = data_2d_px.max((-2, -1), keepdims=True)
+            dpmin = data_2d_px.min((-2, -1), keepdims=True)
+            data_2d_px = (data_2d_px - dpmin) / (dpmax - dpmin)
+
             # Correct any nan value
             nan_mask = np.isnan(data_2d_px)
             data_2d_px[nan_mask] = 0

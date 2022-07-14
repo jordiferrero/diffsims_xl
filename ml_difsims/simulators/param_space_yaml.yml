@@ -77,12 +77,13 @@ sim_params: !pspace
 
   detector_geometry:
     detector_size: 515
-    beam_energy: 200.
     detector_pix_size: 55e-6
     detector_type: 'Medipix515x515Detector'
     radial_integration_1d: True
     radial_integration_2d: True
     save_peak_position_library: False
+
+  beam_energy: 200.
 
   postprocessing_parameters:
     crop_in_k: False

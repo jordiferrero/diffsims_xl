@@ -1,5 +1,6 @@
 set DAGSTER_HOME=C:\Users\Sauron\Documents\GitHub\strankslab\ml_difsims
+set DAGSTER_HOME=G:\My Drive\PhD\projects\external_measurements\ml_difsims
+
 dagster-daemon run
 
-set DAGSTER_HOME=C:\Users\Sauron\Documents\GitHub\strankslab\ml_difsims
-dagit -f "C:\Users\Sauron\Documents\GitHub\strankslab\ml_difsims\ml_difsims\simulators\large_scale_simulation_from_yaml.py"
+dagit

@@ -297,7 +297,7 @@ def normalise_data(dp_1d_crop, dp_2d_crop, md_dict):
     return dp_1d_crop, dp_2d_crop
 
 
-@graph(out={"dp": GraphOut()})
+@graph(out={"dp_1d": GraphOut(), "dp_2d": GraphOut(), "dp_1d_crop": GraphOut(), "dp_2d_crop": GraphOut()})
 def radial_integration_ops(dp, md_dict):
 
     vs = create_simplenamespace_object(md_dict)
@@ -310,38 +310,27 @@ def radial_integration_ops(dp, md_dict):
     dp_1d_crop, dp_2d_crop = crop_px_interpolate(dp_1d, dp_2d, md_dict)
     dp_1d_crop, dp_2d_crop = normalise_data(dp_1d_crop, dp_2d_crop, md_dict)
 
-    return {"dp": dp}
+    return {"dp_1d":dp_1d, "dp_2d":dp_2d, "dp_1d_crop":dp_1d_crop, "dp_2d_crop":dp_2d_crop}
 
+@op(out={"dp_rebin": Out(),})
+def rebin_signal_dp(dp, md_dict):
+    dp_crop_nav, dp_crop_dp = None, None
 
-def notsure():
-    # Calibrate
-
-
-    # Save cropped
-    name_temp = f'{dp_name}_cropped.hspy'
-    dp.save(os.path.join(dp_dir, name_temp), overwrite=True)
+    rebin_nav = md_dict['rebin_nav']
+    rebin_dp = md_dict['rebin_dp']
 
     # Crop dp into divisible shape
-    if crop_nav:
-        dp = dp.inav[1:, 1:]
-    if crop_sig:
-        dp = dp.isig[134:-61, 144:-51]
+    if rebin_nav > 1:
+        reminder = [a % rebin_nav for a in dp.axes_manager.navigation_shape]
+        dp = dp.inav[reminder[0]:, reminder[1]:]
 
-    # Save rebinned data
-    dp_nav_rebin = dp.rebin(scale=[2, 2, 1, 1])
-    name_temp = f'{dp_name}_rebin_nav_2.hspy'
-    dp_nav_rebin.save(os.path.join(dp_dir, name_temp), overwrite=True)
+    if rebin_dp > 1:
+        reminder = [a % rebin_dp for a in dp.axes_manager.signal_shape]
+        dp = dp.isig[reminder[0]:, reminder[1]:]
 
-    dp_sig_rebin = dp.rebin(scale=[1, 1, 2, 2])
-    name_temp = f'{dp_name}_rebin_sig_2.hspy'
-    dp_sig_rebin.save(os.path.join(dp_dir, name_temp), overwrite=True)
-
-
-
-    # Clean up memory
-    del dp
-    gc.collect()
-    print(f"File {i} {dp_name} finished.")
+    # Rebin all
+    dp_rebin = dp.rebin(scale=[rebin_nav, rebin_nav, rebin_dp, rebin_dp])
+    return dp_rebin
 
 @graph()
 def pre_process_experimental_file():
@@ -352,10 +341,10 @@ def pre_process_experimental_file():
 
     dp = load_and_beam_center_ops(file_path, md_dict)
     dp = apply_corrections_and_calibrations_ops(dp, md_dict, file_path)
+    dp_1d, dp_2d, dp_1d_crop, dp_2d_crop = radial_integration_ops(dp, md_dict)
 
+    dp_rebin = rebin_signal_dp(dp, md_dict)
 
-    # Radial integration + crop, interpolate and normalise
-    # Rebin?
-    # Save
+    # Save all files
     save_npz_file(file_path, md_dict, exp_name, sample_name, scan_id)
     return

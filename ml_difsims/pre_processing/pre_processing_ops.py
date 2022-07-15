@@ -9,7 +9,7 @@ import warnings
 from typing import Tuple
 import pyxem as pxm
 import h5py
-from dagster import op, job, Out, graph, GraphOut
+from dagster import op, job, Out, graph, GraphOut, get_dagster_logger
 import numpy as np
 from types import SimpleNamespace
 
@@ -43,21 +43,6 @@ def get_sample_names(file_path) -> Tuple[str, str, str]:
     scan_id = p_elements[-2]
 
     return exp_name, sample_name, scan_id
-
-@op()
-def save_npz_file(file_path, md_dict, exp_name, sample_name, scan_id):
-    # Create save path for processed data
-    root_processed = md_dict["processed_exp_data_root"]
-
-    # Create processed folder
-    completed_folder = os.path.join(root_processed, 'npz_radial_crop',)
-    if not os.path.exists(completed_folder):
-        os.makedirs(completed_folder)
-
-    completed_file_path = os.path.join(completed_folder, f"{exp_name}/{sample_name}_{scan_id}.npz")
-    test_arr = np.array([1,2,3])
-    np.savez(completed_file_path, x=test_arr)
-    return
 
 @op(out={"dp_masked": Out()})
 def apply_mask(dp, md_dict):
@@ -167,6 +152,62 @@ def threshold_signal(dp, md_dict) -> pxm.signals.electron_diffraction2d.Electron
 
     return dp
 
+@op()
+def save_files(file_path, md_dict, dp, dp_rebin, dp_1d, dp_2d, dp_1d_crop, dp_2d_crop, q_new) -> None:
+    # Find out which files to save
+    save_full_hspy_dp = md_dict["save_full_hspy_dp"]
+    save_full_hspy_rebin_dp = md_dict["save_full_hspy_rebin_dp"]
+    save_full_hspy_radial = md_dict["save_full_hspy_radial"]
+    save_crop_npz_radial = md_dict["save_crop_npz_radial"]
+
+    exp_name, sample_name, scan_id = get_sample_names(file_path)
+
+    # Create save path for processed data
+    root_processed = md_dict["processed_exp_data_root"]
+
+    save_hspy_folder = os.path.join(root_processed, 'hspy_files', )
+    # Make folder if not exists
+    if not os.path.exists(save_hspy_folder):
+        os.makedirs(save_hspy_folder)
+
+    if save_full_hspy_dp:
+        save_file =f"{exp_name}/{sample_name}_{scan_id}.hspy"
+        dp.save(os.path.join(save_hspy_folder, save_file), overwrite=True)
+
+    if save_full_hspy_rebin_dp:
+        save_file =f"{exp_name}/{sample_name}_{scan_id}_rebin.hspy"
+        dp_rebin.save(os.path.join(save_hspy_folder, save_file), overwrite=True)
+
+    if save_full_hspy_radial:
+        if dp_1d is not None:
+            save_file =f"{exp_name}/{sample_name}_{scan_id}_radial_1d.hspy"
+            dp_1d.save(os.path.join(save_hspy_folder, save_file), overwrite=True)
+
+        if dp_2d is not None:
+            save_file = f"{exp_name}/{sample_name}_{scan_id}_radial_2d.hspy"
+            dp_2d.save(os.path.join(save_hspy_folder, save_file), overwrite=True)
+
+    if save_crop_npz_radial:
+        save_npz_folder = os.path.join(root_processed, 'npz_radial_crop',)
+        # Make folder if not exists
+        if not os.path.exists(save_npz_folder):
+            os.makedirs(save_npz_folder)
+        # Save files
+        if dp_1d_crop is not None:
+            save_file = f"{exp_name}/{sample_name}_{scan_id}_1d.npz"
+            np.savez(os.path.join(save_npz_folder, save_file),
+                     y=dp_1d_crop.data, x=q_new)
+
+            save_file = f"{exp_name}/{sample_name}_{scan_id}_radial_crop_1d.hspy"
+            dp_1d_crop.save(os.path.join(save_hspy_folder, save_file), overwrite=True)
+        if dp_2d_crop is not None:
+            save_file = f"{exp_name}/{sample_name}_{scan_id}_2d.npz"
+            np.savez(os.path.join(save_npz_folder, save_file),
+                     y=dp_2d_crop.data, x=q_new)
+
+            save_file = f"{exp_name}/{sample_name}_{scan_id}_radial_crop_2d.hspy"
+            dp_2d_crop.save(os.path.join(save_hspy_folder, save_file), overwrite=True)
+    return
 
 @graph(out={"dp": GraphOut()})
 def apply_corrections_and_calibrations_ops(dp, md_dict, file_path):
@@ -232,7 +273,7 @@ def interpolate_2d(signal_data, q_array, crop_range_q, crop_size):
     # Transpose back
     return y_interpol_2d.T
 
-@op(out={"dp_1d_crop": Out(), "dp_2d_crop": Out()})
+@op(out={"dp_1d_crop": Out(), "dp_2d_crop": Out(), "q_new": Out()})
 def crop_px_interpolate(dp_1d, dp_2d, md_dict):
     dp_1d_crop, dp_2d_crop = None, None
 
@@ -243,6 +284,7 @@ def crop_px_interpolate(dp_1d, dp_2d, md_dict):
 
     if crop_in_px:
         crop_size = cropping_stop_px - cropping_start_px # In pixels
+        q_new = np.linspace(crop_range_q[0], crop_range_q[1], crop_size)
 
         if dp_1d is not None:
             # Get the experimental q range
@@ -273,11 +315,11 @@ def crop_px_interpolate(dp_1d, dp_2d, md_dict):
             sig_ax.offset = crop_range_q[0]
             sig_ax.scale = (crop_range_q[1] - crop_range_q[0]) / crop_size
 
-    return dp_1d_crop, dp_2d_crop
+    return dp_1d_crop, dp_2d_crop, q_new
 
 
 @op(out={"dp_1d_crop": Out(), "dp_2d_crop": Out()})
-def normalise_data(dp_1d_crop, dp_2d_crop, md_dict):
+def normalise_data(dp_1d_crop, dp_2d_crop):
     if dp_1d_crop is not None:
         dpmax = dp_1d_crop.data.max(-1, keepdims=True)
         dpmin = dp_1d_crop.data.min(-1, keepdims=True)
@@ -297,7 +339,18 @@ def normalise_data(dp_1d_crop, dp_2d_crop, md_dict):
     return dp_1d_crop, dp_2d_crop
 
 
-@graph(out={"dp_1d": GraphOut(), "dp_2d": GraphOut(), "dp_1d_crop": GraphOut(), "dp_2d_crop": GraphOut()})
+@op(out={"dp_1d": Out(), "dp_2d": Out()})
+def apply_sqrt_signal(dp_1d, dp_2d, md_dict):
+    sqrt_signal = md_dict['sqrt_signal']
+    if sqrt_signal:
+        if dp_1d is not None:
+            dp_1d.data = np.sqrt(dp_1d.data)
+        if dp_2d is not None:
+            dp_2d.data = np.sqrt(dp_2d.data)
+
+    return dp_1d, dp_2d
+
+@graph(out={"dp_1d": GraphOut(), "dp_2d": GraphOut(), "dp_1d_crop": GraphOut(), "dp_2d_crop": GraphOut(), "q_new": GraphOut()})
 def radial_integration_ops(dp, md_dict):
 
     vs = create_simplenamespace_object(md_dict)
@@ -306,11 +359,14 @@ def radial_integration_ops(dp, md_dict):
     dp, vs = set_detector_on_dp_object(vs, dp)
     dp_1d, dp_2d = radially_integrate(dp, vs, md_dict)
 
-    # Crop, interpolate and normalise
-    dp_1d_crop, dp_2d_crop = crop_px_interpolate(dp_1d, dp_2d, md_dict)
-    dp_1d_crop, dp_2d_crop = normalise_data(dp_1d_crop, dp_2d_crop, md_dict)
+    # Apply sqrt of signal
+    dp_1d, dp_2d = apply_sqrt_signal(dp_1d, dp_2d, md_dict)
 
-    return {"dp_1d":dp_1d, "dp_2d":dp_2d, "dp_1d_crop":dp_1d_crop, "dp_2d_crop":dp_2d_crop}
+    # Crop, interpolate and normalise
+    dp_1d_crop, dp_2d_crop, q_new = crop_px_interpolate(dp_1d, dp_2d, md_dict)
+    dp_1d_crop, dp_2d_crop = normalise_data(dp_1d_crop, dp_2d_crop)
+
+    return {"dp_1d":dp_1d, "dp_2d":dp_2d, "dp_1d_crop":dp_1d_crop, "dp_2d_crop":dp_2d_crop, "q_new":q_new,}
 
 @op(out={"dp_rebin": Out(),})
 def rebin_signal_dp(dp, md_dict):
@@ -341,10 +397,12 @@ def pre_process_experimental_file():
 
     dp = load_and_beam_center_ops(file_path, md_dict)
     dp = apply_corrections_and_calibrations_ops(dp, md_dict, file_path)
-    dp_1d, dp_2d, dp_1d_crop, dp_2d_crop = radial_integration_ops(dp, md_dict)
+    dp_1d, dp_2d, dp_1d_crop, dp_2d_crop, q_crop_new = radial_integration_ops(dp, md_dict)
 
     dp_rebin = rebin_signal_dp(dp, md_dict)
 
     # Save all files
-    save_npz_file(file_path, md_dict, exp_name, sample_name, scan_id)
+    save_files(file_path, md_dict, dp, dp_rebin, dp_1d, dp_2d, dp_1d_crop, dp_2d_crop, q_crop_new)
+
+    get_dagster_logger().info("Processed data completed")
     return

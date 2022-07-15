@@ -22,9 +22,10 @@ config_dict = {
     'processed_exp_data_root': "G:/My Drive/PhD/projects/external_measurements/ml_difsims/data/experimental/experimental_processed",
 
     # Additional files to save
-    'save_full_hspy_radial_1d_scan': True,
-    'save_full_hspy_radial_2d_scan': True,
-    # ...
+    'save_full_hspy_dp': False,
+    'save_full_hspy_rebin_dp': True,
+    'save_full_hspy_radial': True,
+    'save_crop_npz_radial': True,
 
     # Calibration files
     'recip_cal': 0.005154,

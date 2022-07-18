@@ -1,30 +1,34 @@
+# Convert from mib to hspy
+# Rebin
+# Correct for centering, distortion and calibration (diffraction space)
+# Radially integrate
+# Interpolate to match size of simulation and range of simulation
 import os, glob
 import warnings
 from typing import Tuple
 import pyxem as pxm
 import h5py
-from dagster import op, job, Out, graph, GraphOut, get_dagster_logger, fs_io_manager
+from dagster import op, job, Out, graph, GraphOut, get_dagster_logger
 import numpy as np
 from types import SimpleNamespace
 
 from scipy import interpolate
 
-from ml_difsims.pre_processing.hspy_io_manager import hyperspy_io_manager
 from ml_difsims.simulators.simulator_diffsims_dagster_ops import set_detector_on_dp_object, radially_integrate_1d, \
     radially_integrate_2d
 
-@op(config_schema={"file_path": str}, out={"file_path": Out(io_manager_key="fs")})
+@op(config_schema={"file_path": str}, out={"file_path": Out()})
 def get_path(context) -> str:
     file_path = context.op_config["file_path"]
     context.log.info(file_path)
     return file_path
 
-@op(config_schema={"md_dict": dict}, out={"file_path": Out(io_manager_key="fs")})
+@op(config_schema={"md_dict": dict}, out={"file_path": Out()})
 def get_metadata_dict(context) -> dict:
     md_dict = context.op_config["md_dict"]
     return md_dict
 
-@op(out={"exp_name": Out(io_manager_key="fs"), "sample_name": Out(io_manager_key="fs"), "scan_id": Out(io_manager_key="fs"),})
+@op(out={"exp_name": Out(), "sample_name": Out(), "scan_id": Out(),})
 def get_sample_names(file_path) -> Tuple[str, str, str]:
     # Get absolute path elements
     p_elements = os.path.abspath(file_path).split('\\')
@@ -38,7 +42,7 @@ def get_sample_names(file_path) -> Tuple[str, str, str]:
 
     return exp_name, sample_name, scan_id
 
-@op(out={"dp_masked": Out(io_manager_key="hspy")})
+@op(out={"dp_masked": Out()})
 def apply_mask(dp, md_dict):
     mask_path = md_dict['mask_path']
     if mask_path == "with_exp_datafiles":
@@ -55,11 +59,9 @@ def apply_mask(dp, md_dict):
         except FileNotFoundError:
             raise FileNotFoundError
 
-    print(dp)
-    print(mask)
-    return dp * mask
+    return mask_path * dp
 
-@op(out={"n_shifts": Out(io_manager_key="fs")})
+@op(out={"n_shifts": Out()})
 def get_shifts_from_mean_dp(dp) -> np.ndarray:
     mean_dp = dp.mean()
     mean_dp = pxm.signals.electron_diffraction2d.ElectronDiffraction2D(mean_dp)
@@ -74,7 +76,7 @@ def get_shifts_from_mean_dp(dp) -> np.ndarray:
 
     return n_shifts
 
-@op(out={"dp": Out(io_manager_key="hspy")})
+@op(out={"dp": Out()})
 def load_file(file_path) -> pxm.signals.electron_diffraction2d.ElectronDiffraction2D:
     # Load file
     f = h5py.File(file_path, 'r')['Experiments/__unnamed__/data']
@@ -88,20 +90,19 @@ def load_file(file_path) -> pxm.signals.electron_diffraction2d.ElectronDiffracti
 
     return dp
 
-@op(out={"dp": Out(io_manager_key="hspy")})
+@op(out={"dp": Out()})
 def align_and_fine_center(dp, n_shifts) -> pxm.signals.electron_diffraction2d.ElectronDiffraction2D:
     dp.align2D(shifts=-n_shifts, crop=False)
     dp.center_direct_beam(method='interpolate', sigma=5, upsample_factor=4, kind='linear', half_square_width=10)
     return dp
 
-@op(out={"dp": Out(io_manager_key="hspy")})
+@op(out={"dp": Out()})
 def apply_affine_transform(dp, md_dict) -> pxm.signals.electron_diffraction2d.ElectronDiffraction2D:
     transform_mat = md_dict['affine_matrix']
-    transform_mat = np.array(transform_mat)
     dp.apply_affine_transformation(transform_mat, keep_dtype=True)
     return dp
 
-@op(out={"dp": Out(io_manager_key="hspy")})
+@op(out={"dp": Out()})
 def set_nav_calibration(dp, md_dict, file_path) -> pxm.signals.electron_diffraction2d.ElectronDiffraction2D:
     def get_magnification_from_file(metadata_fname):
         md = h5py.File(metadata_fname, 'r')
@@ -115,13 +116,13 @@ def set_nav_calibration(dp, md_dict, file_path) -> pxm.signals.electron_diffract
     dp.set_scan_calibration(nav_cal)
     return dp
 
-@op(out={"dp": Out(io_manager_key="hspy")})
+@op(out={"dp": Out()})
 def set_dif_calibration(dp, md_dict) -> pxm.signals.electron_diffraction2d.ElectronDiffraction2D:
     recip_cal = md_dict['recip_cal']
     dp.set_diffraction_calibration(recip_cal)
     return dp
 
-@op(out={"dp": Out(io_manager_key="hspy")})
+@op(out={"dp": Out()})
 def rotation_correction(dp, md_dict) -> pxm.signals.electron_diffraction2d.ElectronDiffraction2D:
     bool_correct_rot = md_dict['rotation_correction']
     rotation_angle = md_dict['rotation_angle']
@@ -129,7 +130,7 @@ def rotation_correction(dp, md_dict) -> pxm.signals.electron_diffraction2d.Elect
         raise NotImplementedError(f"Rotation correction is not implemented yet. Rotation angle is set to {rotation_angle}")
     return dp
 
-@op(out={"dp": Out(io_manager_key="hspy")})
+@op(out={"dp": Out()})
 def threshold_signal(dp, md_dict) -> pxm.signals.electron_diffraction2d.ElectronDiffraction2D:
     threshold_px_intensity = md_dict['threshold_px_intensity']
     if threshold_px_intensity > 0:
@@ -138,7 +139,7 @@ def threshold_signal(dp, md_dict) -> pxm.signals.electron_diffraction2d.Electron
 
     return dp
 
-@op(out={"md": Out(io_manager_key="fs")})
+@op(out={"md": Out()})
 def create_simplenamespace_object(md_dict) -> SimpleNamespace:
     beam_energy = md_dict['beam_energy']
     recip_cal = md_dict['recip_cal']
@@ -148,23 +149,21 @@ def create_simplenamespace_object(md_dict) -> SimpleNamespace:
     setattr(md, 'calibration', recip_cal)
     return md
 
-@op(out={"dp_1d": Out(io_manager_key="hspy"), "dp_2d": Out(io_manager_key="hspy")})
+@op(out={"dp_1d": Out(), "dp_2d": Out()})
 def radially_integrate(dp, vs, md_dict):
-
-    dp, vs = set_detector_on_dp_object(vs, dp)
     dp_1d, dp_2d = None, None
 
     bool_integration_1d = md_dict['radial_integration_1d']
     bool_integration_2d = md_dict['radial_integration_2d']
 
     if bool_integration_1d:
-        dp_1d = radially_integrate_1d(dp, vs)
+        dp_1d = radially_integrate_1d(dp, vs, md_dict)
     if bool_integration_2d:
-        dp_2d = radially_integrate_2d(dp, vs)
+        dp_2d = radially_integrate_2d(dp, vs, md_dict)
 
     return dp_1d, dp_2d
 
-
+@op()
 def interpolate_1d(signal_data, q_array, crop_range_q, crop_size):
     # Do interpolation
     x = q_array
@@ -176,7 +175,7 @@ def interpolate_1d(signal_data, q_array, crop_range_q, crop_size):
     y_interpol = f(x_new)
     return y_interpol
 
-
+@op()
 def interpolate_2d(signal_data, q_array, crop_range_q, crop_size):
     # Transpose data (so we can iterate though angular axis of 360)
     signal_data = signal_data.T
@@ -186,7 +185,7 @@ def interpolate_2d(signal_data, q_array, crop_range_q, crop_size):
     # Transpose back
     return y_interpol_2d.T
 
-@op(out={"dp_1d_crop": Out(io_manager_key="hspy"), "dp_2d_crop": Out(io_manager_key="hspy"), "q_new": Out(io_manager_key="fs")})
+@op(out={"dp_1d_crop": Out(), "dp_2d_crop": Out(), "q_new": Out()})
 def crop_px_interpolate(dp_1d, dp_2d, md_dict):
     dp_1d_crop, dp_2d_crop = None, None
 
@@ -231,7 +230,7 @@ def crop_px_interpolate(dp_1d, dp_2d, md_dict):
     return dp_1d_crop, dp_2d_crop, q_new
 
 
-@op(out={"dp_1d_crop": Out(io_manager_key="hspy"), "dp_2d_crop": Out(io_manager_key="hspy")})
+@op(out={"dp_1d_crop": Out(), "dp_2d_crop": Out()})
 def normalise_data(dp_1d_crop, dp_2d_crop):
     if dp_1d_crop is not None:
         dpmax = dp_1d_crop.data.max(-1, keepdims=True)
@@ -252,7 +251,7 @@ def normalise_data(dp_1d_crop, dp_2d_crop):
     return dp_1d_crop, dp_2d_crop
 
 
-@op(out={"dp_1d": Out(io_manager_key="hspy"), "dp_2d": Out(io_manager_key="hspy")})
+@op(out={"dp_1d": Out(), "dp_2d": Out()})
 def apply_sqrt_signal(dp_1d, dp_2d, md_dict):
     sqrt_signal = md_dict['sqrt_signal']
     if sqrt_signal:
@@ -263,7 +262,7 @@ def apply_sqrt_signal(dp_1d, dp_2d, md_dict):
 
     return dp_1d, dp_2d
 
-@op(out={"dp_rebin": Out(io_manager_key="hspy"),})
+@op(out={"dp_rebin": Out(),})
 def rebin_signal_dp(dp, md_dict):
     dp_crop_nav, dp_crop_dp = None, None
 
@@ -378,6 +377,7 @@ def radial_integration_ops(dp, md_dict):
     vs = create_simplenamespace_object(md_dict)
 
     # Radial integration
+    dp, vs = set_detector_on_dp_object(vs, dp)
     dp_1d, dp_2d = radially_integrate(dp, vs, md_dict)
 
     # Apply sqrt of signal
@@ -389,8 +389,7 @@ def radial_integration_ops(dp, md_dict):
 
     return {"dp_1d":dp_1d, "dp_2d":dp_2d, "dp_1d_crop":dp_1d_crop, "dp_2d_crop":dp_2d_crop, "q_new":q_new,}
 
-@job(resource_defs={"hspy": hyperspy_io_manager,
-                    "fs": fs_io_manager})
+@graph()
 def pre_process_experimental_file():
     file_path = get_path()
     md_dict = get_metadata_dict()

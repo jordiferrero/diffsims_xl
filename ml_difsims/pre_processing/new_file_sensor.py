@@ -11,7 +11,7 @@ config_dict = {
     #           -> all raw files
 
     #'exp_data_root': 'D:/Data/jf631/simulations_diffsims_ml/experimental',
-    'exp_data_root': "G:/My Drive/PhD/projects/external_measurements/ml_difsims/data/experimental",
+    'exp_data_root': "D:\Data\jf631\simulations_diffsims_ml\experimental",
     'file_wildcard': '**/2*_data.hdf5',
 
     # Save processed data (saved within folders of folders):
@@ -19,7 +19,7 @@ config_dict = {
     #   -> processing step (npz, radial, centered_corrected_hspy)
     #      -> sample_type_name
     #           -> all processed files with their unique ID
-    'processed_exp_data_root': "G:/My Drive/PhD/projects/external_measurements/ml_difsims/data/experimental/experimental_processed",
+    'processed_exp_data_root': "D:\Data\jf631\simulations_diffsims_ml\experimental_processed",
 
     # Additional files to save
     'save_full_hspy_dp': False,
@@ -40,9 +40,9 @@ config_dict = {
                     },
 
     # Affine transform
-    'affine_matrix': np.array([ [ 0.98051804, -0.01322819,  0.        ],
-                                [-0.01322819,  0.9910181 ,  0.        ],
-                                [ 0.        ,  0.        ,  1.        ]]),
+    'affine_matrix': [[ 0.98051804, -0.01322819,  0.        ],
+                      [-0.01322819,  0.9910181 ,  0.        ],
+                      [ 0.        ,  0.        ,  1.        ]],
 
     'rotation_angle': 73.13, #deg
     'rotation_correction': False,
@@ -89,12 +89,12 @@ def pre_processing_sensor() -> SensorDefinition:
         paths = glob.glob(path, recursive=True)
         paths.sort()
 
-        for raw_file_path in paths:
+        for raw_file_path in paths[:1]:
             # Get the unique name of each raw file
             f_name = os.path.basename(raw_file_path).split('.')[0]
 
             # Search if the raw file has been fully processed/completed
-            completed_file_path = os.path.join(ROOT_PROCESSED, 'npz_radial_crop', f"**/{f_name}*.npz")
+            completed_file_path = os.path.join(ROOT_PROCESSED, 'npz_radial_crop', f"**/*{f_name}*.npz")
             completed_file_path = glob.glob(completed_file_path, recursive=True)
             if completed_file_path != []:
                 continue
@@ -102,8 +102,9 @@ def pre_processing_sensor() -> SensorDefinition:
                 yield RunRequest(
                     run_key=raw_file_path,
                     run_config={
-                        "ops": {"load_file": {"config": {"file_path": raw_file_path}},
-                                "load_metadata_dict": {"config": {"md_dict": config_dict}}}
+                        "ops": {"get_path": {"config": {"file_path": raw_file_path}},
+                                #"get_metadata_dict": {"config": {"md_dict": config_dict}}
+                                }
                     },
                 )
                 has_new_files = True

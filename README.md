@@ -1,6 +1,7 @@
-# ML_DIFSIMS
+# DIFFSIMS XL
 
-Welcome to your new Dagster repository.
+Welcome to diffsims XL, a platform to simulate large amounts of electron diffraction data using Dagster.
+Continue reading to get started!
 
 ### Contents
 
